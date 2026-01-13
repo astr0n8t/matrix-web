@@ -7,6 +7,8 @@ An end-to-end encrypted Matrix/Element bot with a simple IRC-like web interface 
 - End-to-end encryption support via matrix-sdk
 - Simple IRC-like web interface
 - Real-time message streaming using Server-Sent Events (SSE)
+- **Message history**: Automatically loads and displays recent messages on startup
+- **Header-based authentication**: Optional reverse proxy authentication support
 - Configuration via YAML file
 - No database required - all configuration in a single file
 
@@ -38,6 +40,13 @@ room_id: "!room:matrix.org"
 web:
   host: "127.0.0.1"
   port: 8080
+  # Optional: Header-based authentication
+  # auth:
+  #   header_name: "X-Auth-Token"
+  #   header_value: "your-secret-token"
+# Optional: Message history settings
+message_history:
+  limit: 50  # Number of messages to load
 ```
 
 ## Usage
@@ -57,10 +66,12 @@ http://127.0.0.1:8080
 ## How It Works
 
 - The bot logs in to your Matrix homeserver with the provided credentials
-- It joins the specified room and starts syncing messages
-- The web interface connects to the bot via SSE for real-time message updates
+- It joins the specified room and loads recent message history
+- The bot starts syncing new messages in real-time
+- The web interface loads message history and connects via SSE for real-time updates
 - Messages sent through the web interface are posted to the Matrix room
 - All messages in the room are displayed in the IRC-like interface
+- Optional header-based authentication protects the web interface when behind a reverse proxy
 
 ## Architecture
 

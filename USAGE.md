@@ -42,12 +42,23 @@ This guide will help you set up and run your Matrix Web Bot.
    web:
      host: "127.0.0.1"  # Change to "0.0.0.0" to allow external connections
      port: 8080          # Change if you want a different port
+     
+     # Optional: Header-based authentication for reverse proxy
+     # Uncomment to enable authentication
+     # auth:
+     #   header_name: "X-Auth-Token"
+     #   header_value: "your-secret-token-here"
+   
+   # Message history configuration (optional, defaults to 50)
+   message_history:
+     limit: 50  # Number of historical messages to load on startup
    ```
 
    **Important Notes**:
    - The `room_id` must start with `!` and include the full homeserver domain
    - To find your room ID in Element: Room Settings → Advanced → Internal Room ID
    - Keep `config.yaml` secure - it contains your bot credentials
+   - Header authentication is useful when deploying behind a reverse proxy like nginx
 
 ## Building and Running
 
@@ -82,10 +93,26 @@ cargo build --release
    - Your message will be posted to the Matrix room
 
 4. **Receive messages**:
-   - All messages in the Matrix room will appear in real-time
+   - Previous messages are loaded automatically on startup (configurable limit)
+   - All new messages in the Matrix room will appear in real-time
    - Messages are displayed in IRC-like format: `@user:homeserver: message`
 
 ## Features
+
+### Message History
+
+The bot automatically loads recent messages when it starts:
+- Configurable via `message_history.limit` in config (default: 50 messages)
+- Messages are displayed in chronological order
+- History is loaded from the Matrix server on each restart
+
+### Header-Based Authentication
+
+Optional authentication using HTTP headers for reverse proxy setups:
+- Configure via `web.auth.header_name` and `web.auth.header_value` in config
+- Useful when deploying behind nginx, Caddy, or other reverse proxies
+- The reverse proxy validates the user and passes a header to the bot
+- Example: nginx can validate OAuth and pass `X-Auth-Token` header
 
 ### End-to-End Encryption (E2EE)
 
@@ -179,6 +206,8 @@ sudo systemctl start matrix-web
 
 ### Using with Reverse Proxy (nginx)
 
+#### Basic Setup (No Authentication)
+
 Example nginx configuration:
 ```nginx
 server {
@@ -195,6 +224,41 @@ server {
     }
 }
 ```
+
+#### With Header-Based Authentication
+
+Example nginx configuration with authentication:
+```nginx
+server {
+    listen 80;
+    server_name bot.example.com;
+
+    location / {
+        # Add authentication check here (e.g., OAuth, basic auth, etc.)
+        # This example uses a simple shared secret
+        
+        # Set the authentication header
+        proxy_set_header X-Auth-Token "your-secret-token-here";
+        
+        proxy_pass http://127.0.0.1:8080;
+        proxy_http_version 1.1;
+        proxy_set_header Upgrade $http_upgrade;
+        proxy_set_header Connection 'upgrade';
+        proxy_set_header Host $host;
+        proxy_cache_bypass $http_upgrade;
+    }
+}
+```
+
+Then configure your bot's `config.yaml`:
+```yaml
+web:
+  auth:
+    header_name: "X-Auth-Token"
+    header_value: "your-secret-token-here"
+```
+
+This ensures only requests with the correct header can access the bot.
 
 ## Development
 
@@ -216,10 +280,14 @@ matrix-web/
 ### API Endpoints
 
 - `GET /` - Web interface (HTML)
+- `GET /api/history` - Get message history
+  - Response: `{"messages": ["sender: message", ...]}`
 - `POST /api/messages` - Send a message to Matrix
   - Body: `{"message": "your message"}`
   - Response: `{"success": true/false, "error": "..."}`
 - `GET /api/stream` - SSE stream of incoming messages
+
+**Note**: All endpoints require authentication header if configured in `config.yaml`.
 
 ## Getting Help
 
