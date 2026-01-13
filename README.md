@@ -8,8 +8,10 @@ An end-to-end encrypted Matrix/Element bot with a simple IRC-like web interface 
 - Simple IRC-like web interface
 - Real-time message streaming using Server-Sent Events (SSE)
 - **Message history**: Automatically loads and displays recent messages on startup
-- **Header-based authentication**: Optional reverse proxy authentication support
+- **Header-based authentication**: Optional reverse proxy authentication with SHA-256 hashed tokens
+- **Environment variable support**: Secure credential management for production deployments
 - Configuration via YAML file
+- Utility tool for generating authentication token hashes
 - No database required - all configuration in a single file
 
 ## Prerequisites
@@ -41,12 +43,26 @@ web:
   host: "127.0.0.1"
   port: 8080
   # Optional: Header-based authentication
+  # IMPORTANT: Use SHA-256 hash of your secret token, not the plain value
+  # Generate hash with: cargo run --bin hash-tool "your-secret-token"
   # auth:
   #   header_name: "X-Auth-Token"
-  #   header_value: "your-secret-token"
+  #   header_value_hash: "ea5add57437cbf20af59034d7ed17968dcc56767b41965fcc5b376d45db8b4a3"
 # Optional: Message history settings
 message_history:
   limit: 50  # Number of messages to load
+```
+
+### Generating Authentication Hash
+
+To generate a hash for your authentication token:
+
+```bash
+# Using the provided hash tool
+cargo run --bin hash-tool "your-secret-token"
+
+# Or using command line
+echo -n "your-secret-token" | sha256sum
 ```
 
 ### Environment Variable Support
@@ -60,13 +76,13 @@ All configuration values can be overridden using environment variables:
 - `WEB_HOST` - Web server host
 - `WEB_PORT` - Web server port
 - `WEB_AUTH_HEADER_NAME` - Authentication header name
-- `WEB_AUTH_HEADER_VALUE` - Authentication header value (recommended for secrets)
+- `WEB_AUTH_HEADER_VALUE` - Authentication header value (will be hashed automatically)
 - `MESSAGE_HISTORY_LIMIT` - Number of messages to load
 
 Example using environment variables:
 ```bash
 export MATRIX_PASSWORD="secret-password"
-export WEB_AUTH_HEADER_VALUE="secret-token"
+export WEB_AUTH_HEADER_VALUE="secret-token"  # Will be hashed automatically
 cargo run --release
 ```
 

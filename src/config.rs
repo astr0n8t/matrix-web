@@ -1,4 +1,5 @@
 use serde::{Deserialize, Serialize};
+use sha2::{Sha256, Digest};
 use std::env;
 
 #[derive(Debug, Deserialize, Serialize)]
@@ -23,7 +24,8 @@ pub struct WebConfig {
 #[derive(Debug, Deserialize, Serialize, Clone)]
 pub struct AuthConfig {
     pub header_name: String,
-    pub header_value: String,
+    /// SHA-256 hash of the expected header value (in hexadecimal)
+    pub header_value_hash: String,
 }
 
 #[derive(Debug, Deserialize, Serialize)]
@@ -83,9 +85,11 @@ impl Config {
         // Authentication configuration
         if let Ok(header_name) = env::var("WEB_AUTH_HEADER_NAME") {
             if let Ok(header_value) = env::var("WEB_AUTH_HEADER_VALUE") {
+                // Hash the environment variable value
+                let hash = hash_value(&header_value);
                 self.web.auth = Some(AuthConfig {
                     header_name,
-                    header_value,
+                    header_value_hash: hash,
                 });
             }
         }
@@ -97,4 +101,12 @@ impl Config {
             }
         }
     }
+}
+
+/// Hash a value using SHA-256 and return as hexadecimal string
+pub fn hash_value(value: &str) -> String {
+    let mut hasher = Sha256::new();
+    hasher.update(value.as_bytes());
+    let result = hasher.finalize();
+    hex::encode(result)
 }

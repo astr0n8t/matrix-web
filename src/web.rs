@@ -13,7 +13,7 @@ use tokio_stream::{wrappers::BroadcastStream, StreamExt};
 use tracing::{info, warn};
 
 use crate::bot::MatrixBot;
-use crate::config::AuthConfig;
+use crate::config::{AuthConfig, hash_value};
 
 #[derive(Clone)]
 pub struct AppState {
@@ -67,7 +67,9 @@ async fn auth_middleware(
         
         if let Some(header_value) = headers.get(&auth_config.header_name) {
             if let Ok(value_str) = header_value.to_str() {
-                if value_str == auth_config.header_value {
+                // Hash the incoming header value and compare with stored hash
+                let incoming_hash = hash_value(value_str);
+                if incoming_hash == auth_config.header_value_hash {
                     return Ok(next.run(request).await);
                 }
             }

@@ -44,10 +44,11 @@ This guide will help you set up and run your Matrix Web Bot.
      port: 8080          # Change if you want a different port
      
      # Optional: Header-based authentication for reverse proxy
-     # Uncomment to enable authentication
+     # IMPORTANT: Use SHA-256 hash of the token, not the plain value!
+     # Generate hash: cargo run --bin hash-tool "your-secret-token"
      # auth:
      #   header_name: "X-Auth-Token"
-     #   header_value: "your-secret-token-here"
+     #   header_value_hash: "ea5add57437cbf20af59034d7ed17968dcc56767b41965fcc5b376d45db8b4a3"
    
    # Message history configuration (optional, defaults to 50)
    message_history:
@@ -58,7 +59,24 @@ This guide will help you set up and run your Matrix Web Bot.
    - The `room_id` must start with `!` and include the full homeserver domain
    - To find your room ID in Element: Room Settings → Advanced → Internal Room ID
    - Keep `config.yaml` secure - it contains your bot credentials
+   - **Security**: Authentication uses SHA-256 hashing - only store the hash, never the plain token
    - Header authentication is useful when deploying behind a reverse proxy like nginx
+
+### Generating Authentication Hash
+
+To generate a SHA-256 hash for your authentication token:
+
+**Using the provided tool (recommended):**
+```bash
+cargo run --bin hash-tool "your-secret-token"
+```
+
+**Using command line:**
+```bash
+echo -n "your-secret-token" | sha256sum
+```
+
+The hash output should be placed in the `header_value_hash` field in your config.
 
 ### Environment Variable Support
 
@@ -73,8 +91,10 @@ All configuration values can be overridden using environment variables for bette
 | `WEB_HOST` | Web server host | `127.0.0.1` |
 | `WEB_PORT` | Web server port | `8080` |
 | `WEB_AUTH_HEADER_NAME` | Auth header name | `X-Auth-Token` |
-| `WEB_AUTH_HEADER_VALUE` | Auth header value | `secret-token` |
+| `WEB_AUTH_HEADER_VALUE` | Auth header value (auto-hashed) | `secret-token` |
 | `MESSAGE_HISTORY_LIMIT` | Number of messages to load | `50` |
+
+**Note**: When using `WEB_AUTH_HEADER_VALUE` environment variable, the value is automatically hashed using SHA-256. In the config file, you must provide the pre-computed hash as `header_value_hash`.
 
 **Usage Examples**:
 
