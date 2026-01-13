@@ -16,7 +16,7 @@ async fn main() -> anyhow::Result<()> {
     });
 
     // Create Matrix bot
-    let (bot, _rx) = bot::MatrixBot::new(
+    let (bot, _) = bot::MatrixBot::new(
         &config.homeserver,
         &config.username,
         &config.password,

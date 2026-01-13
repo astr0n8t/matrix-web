@@ -233,11 +233,13 @@
             
             eventSource.onmessage = (event) => {
                 // Parse message format: "sender: message"
+                // Matrix IDs contain colons (@user:homeserver.org: message)
+                // So we need to find the first ": " (colon followed by space) after the sender
                 const data = event.data;
-                const colonIndex = data.indexOf(':');
-                if (colonIndex > 0) {
-                    const sender = data.substring(0, colonIndex).trim();
-                    const content = data.substring(colonIndex + 1).trim();
+                const colonSpaceIndex = data.indexOf(': ');
+                if (colonSpaceIndex > 0) {
+                    const sender = data.substring(0, colonSpaceIndex);
+                    const content = data.substring(colonSpaceIndex + 2); // +2 to skip ': '
                     addMessage(sender, content);
                 }
             };

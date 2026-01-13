@@ -79,7 +79,10 @@ async fn stream_messages_handler(
     let rx = state.bot.subscribe();
     let stream = BroadcastStream::new(rx).filter_map(|msg| match msg {
         Ok(message) => Some(Ok(Event::default().data(message))),
-        Err(_) => None,
+        Err(e) => {
+            tracing::warn!("Broadcast stream error: {}", e);
+            None
+        }
     });
 
     Sse::new(stream)
