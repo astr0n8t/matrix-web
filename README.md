@@ -49,6 +49,27 @@ message_history:
   limit: 50  # Number of messages to load
 ```
 
+### Environment Variable Support
+
+All configuration values can be overridden using environment variables:
+
+- `MATRIX_HOMESERVER` - Matrix homeserver URL
+- `MATRIX_USERNAME` - Bot username
+- `MATRIX_PASSWORD` - Bot password (recommended for secrets)
+- `MATRIX_ROOM_ID` - Room ID to join
+- `WEB_HOST` - Web server host
+- `WEB_PORT` - Web server port
+- `WEB_AUTH_HEADER_NAME` - Authentication header name
+- `WEB_AUTH_HEADER_VALUE` - Authentication header value (recommended for secrets)
+- `MESSAGE_HISTORY_LIMIT` - Number of messages to load
+
+Example using environment variables:
+```bash
+export MATRIX_PASSWORD="secret-password"
+export WEB_AUTH_HEADER_VALUE="secret-token"
+cargo run --release
+```
+
 ## Usage
 
 1. Build and run the application:

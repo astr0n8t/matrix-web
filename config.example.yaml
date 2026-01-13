@@ -1,5 +1,17 @@
 # Matrix Bot Configuration
 # Copy this file to config.yaml and fill in your details
+#
+# Environment Variable Support:
+# All values can be overridden using environment variables:
+#   MATRIX_HOMESERVER - Matrix homeserver URL
+#   MATRIX_USERNAME - Bot username
+#   MATRIX_PASSWORD - Bot password (recommended for security)
+#   MATRIX_ROOM_ID - Room ID to join
+#   WEB_HOST - Web server host
+#   WEB_PORT - Web server port
+#   WEB_AUTH_HEADER_NAME - Authentication header name
+#   WEB_AUTH_HEADER_VALUE - Authentication header value (recommended for security)
+#   MESSAGE_HISTORY_LIMIT - Number of messages to load
 
 # Matrix homeserver URL
 homeserver: "https://matrix.org"

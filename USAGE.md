@@ -60,6 +60,52 @@ This guide will help you set up and run your Matrix Web Bot.
    - Keep `config.yaml` secure - it contains your bot credentials
    - Header authentication is useful when deploying behind a reverse proxy like nginx
 
+### Environment Variable Support
+
+All configuration values can be overridden using environment variables for better security:
+
+| Environment Variable | Description | Example |
+|---------------------|-------------|---------|
+| `MATRIX_HOMESERVER` | Matrix homeserver URL | `https://matrix.org` |
+| `MATRIX_USERNAME` | Bot username | `mybot` |
+| `MATRIX_PASSWORD` | Bot password | `secret123` |
+| `MATRIX_ROOM_ID` | Room ID to join | `!abc123:matrix.org` |
+| `WEB_HOST` | Web server host | `127.0.0.1` |
+| `WEB_PORT` | Web server port | `8080` |
+| `WEB_AUTH_HEADER_NAME` | Auth header name | `X-Auth-Token` |
+| `WEB_AUTH_HEADER_VALUE` | Auth header value | `secret-token` |
+| `MESSAGE_HISTORY_LIMIT` | Number of messages to load | `50` |
+
+**Usage Examples**:
+
+1. **Override password only**:
+   ```bash
+   export MATRIX_PASSWORD="my-secret-password"
+   cargo run --release
+   ```
+
+2. **Full environment configuration**:
+   ```bash
+   export MATRIX_HOMESERVER="https://matrix.example.com"
+   export MATRIX_USERNAME="bot_user"
+   export MATRIX_PASSWORD="secret-password"
+   export MATRIX_ROOM_ID="!room123:example.com"
+   export WEB_AUTH_HEADER_VALUE="my-secret-token"
+   cargo run --release
+   ```
+
+3. **Docker/Container deployment**:
+   ```bash
+   docker run -e MATRIX_PASSWORD="secret" \
+              -e WEB_AUTH_HEADER_VALUE="token" \
+              matrix-web
+   ```
+
+**Best Practices**:
+- Use environment variables for all sensitive data (passwords, tokens)
+- Keep non-sensitive defaults in `config.yaml`
+- Environment variables always override config file values
+
 ## Building and Running
 
 ### Development Mode
@@ -164,13 +210,20 @@ cargo build --release
 1. **Config File**: The `config.yaml` file contains sensitive credentials
    - Never commit it to version control (it's in .gitignore)
    - Set appropriate file permissions: `chmod 600 config.yaml`
+   - **Recommended**: Use environment variables for passwords and tokens instead of storing in config file
 
-2. **Web Interface**: 
+2. **Environment Variables**: Best practice for sensitive data
+   - Store passwords, tokens, and secrets in environment variables
+   - Environment variables are not stored in files or version control
+   - Use `.env` files with tools like `direnv` or Docker secrets in production
+   - Example: `export MATRIX_PASSWORD="secret"` instead of putting it in config.yaml
+
+3. **Web Interface**: 
    - By default, only accessible from localhost (127.0.0.1)
    - To allow external access, change host to "0.0.0.0" and use a reverse proxy
    - Consider adding authentication if exposing to the internet
 
-3. **E2EE**:
+4. **E2EE**:
    - Encryption database is stored locally
    - Backup the database if you need to preserve encryption keys
    - Delete the database to reset encryption state
