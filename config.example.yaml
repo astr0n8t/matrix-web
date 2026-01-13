@@ -1,0 +1,17 @@
+# Matrix Bot Configuration
+# Copy this file to config.yaml and fill in your details
+
+# Matrix homeserver URL
+homeserver: "https://matrix.org"
+
+# Bot credentials
+username: "your_bot_username"
+password: "your_bot_password"
+
+# Room to join and monitor
+room_id: "!room:matrix.org"
+
+# Web server configuration
+web:
+  host: "127.0.0.1"
+  port: 8080
