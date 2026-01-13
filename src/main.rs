@@ -21,19 +21,25 @@ async fn main() -> anyhow::Result<()> {
         &config.username,
         &config.password,
         &config.room_id,
+        config.message_history.limit,
     )
     .await?;
 
     // Join the configured room
     bot.join_room().await?;
 
+    // Load message history
+    bot.load_message_history(config.message_history.limit).await?;
+
     // Clone bot for web server
     let bot_for_web = bot.clone();
 
     // Start web server in a separate task
+    let auth_config = config.web.auth.clone();
     let web_handle = tokio::spawn(async move {
         let state = web::AppState {
             bot: bot_for_web,
+            auth: auth_config,
         };
         
         if let Err(e) = web::start_server(&config.web.host, config.web.port, state).await {

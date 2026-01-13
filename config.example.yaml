@@ -15,3 +15,13 @@ room_id: "!room:matrix.org"
 web:
   host: "127.0.0.1"
   port: 8080
+  # Optional: Header-based authentication for reverse proxy
+  # Uncomment and configure these to enable authentication
+  # auth:
+  #   header_name: "X-Auth-Token"
+  #   header_value: "your-secret-token-here"
+
+# Message history configuration
+# Optional: defaults to 50 if not specified
+message_history:
+  limit: 50  # Number of historical messages to load on startup

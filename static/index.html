@@ -191,6 +191,26 @@
             scrollToBottom();
         }
 
+        // Load message history
+        async function loadMessageHistory() {
+            try {
+                const response = await fetch('/api/history');
+                if (response.ok) {
+                    const data = await response.json();
+                    data.messages.forEach(msg => {
+                        const colonSpaceIndex = msg.indexOf(': ');
+                        if (colonSpaceIndex > 0) {
+                            const sender = msg.substring(0, colonSpaceIndex);
+                            const content = msg.substring(colonSpaceIndex + 2);
+                            addMessage(sender, content);
+                        }
+                    });
+                }
+            } catch (error) {
+                console.error('Failed to load message history:', error);
+            }
+        }
+
         // Send message to server
         async function sendMessage() {
             const message = messageInput.value.trim();
@@ -264,8 +284,10 @@
         });
 
         // Initialize
-        connectToStream();
-        messageInput.focus();
+        loadMessageHistory().then(() => {
+            connectToStream();
+            messageInput.focus();
+        });
     </script>
 </body>
 </html>
