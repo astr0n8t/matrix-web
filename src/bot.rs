@@ -87,7 +87,7 @@ impl MatrixBot {
             move |event: OriginalSyncRoomMessageEvent, room: Room| {
                 let bot = bot_clone.clone();
                 async move {
-                    if room.room_id().to_string() != bot.room_id {
+                    if *room.room_id() != bot.room_id {
                         return;
                     }
 
