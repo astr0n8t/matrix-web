@@ -74,6 +74,7 @@ http://127.0.0.1:8080
 - The bot supports end-to-end encryption through matrix-sdk
 - Keep your `config.yaml` file secure as it contains credentials
 - The configuration file is in `.gitignore` to prevent accidental commits
+- See [SECURITY.md](SECURITY.md) for detailed security considerations
 
 ## License
 
