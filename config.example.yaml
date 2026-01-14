@@ -1,0 +1,43 @@
+# Matrix Bot Configuration
+# Copy this file to config.yaml and fill in your details
+#
+# Environment Variable Support:
+# All values can be overridden using environment variables:
+#   MATRIX_HOMESERVER - Matrix homeserver URL
+#   MATRIX_USERNAME - Bot username
+#   MATRIX_PASSWORD - Bot password (recommended for security)
+#   MATRIX_ROOM_ID - Room ID to join
+#   WEB_HOST - Web server host
+#   WEB_PORT - Web server port
+#   WEB_AUTH_HEADER_NAME - Authentication header name
+#   WEB_AUTH_HEADER_VALUE - Authentication header value (will be hashed automatically)
+#   MESSAGE_HISTORY_LIMIT - Number of messages to load
+
+# Matrix homeserver URL
+homeserver: "https://matrix.org"
+
+# Bot credentials
+username: "your_bot_username"
+password: "your_bot_password"
+
+# Room to join and monitor
+room_id: "!room:matrix.org"
+
+# Web server configuration
+web:
+  host: "127.0.0.1"
+  port: 8080
+  # Optional: Header-based authentication for reverse proxy
+  # IMPORTANT: header_value_hash must be a SHA-256 hash (in hex format)
+  # To generate a hash for your token, use:
+  #   echo -n "your-secret-token" | sha256sum
+  # Or in Rust:
+  #   cargo run --bin hash-tool "your-secret-token"
+  # auth:
+  #   header_name: "X-Auth-Token"
+  #   header_value_hash: "5e884898da28047151d0e56f8dc6292773603d0d6aabbdd62a11ef721d1542d8"  # SHA-256 hash of "password"
+
+# Message history configuration
+# Optional: defaults to 50 if not specified
+message_history:
+  limit: 50  # Number of historical messages to load on startup
