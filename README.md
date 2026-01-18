@@ -4,7 +4,8 @@ An end-to-end encrypted Matrix/Element bot with a simple IRC-like web interface 
 
 ## Features
 
-- End-to-end encryption support via matrix-sdk
+- **End-to-end encryption (E2EE)** with automatic cross-signing and backup support
+- **Persistent encryption store** using SQLite to maintain encryption keys across restarts
 - Simple IRC-like web interface
 - Real-time message streaming using Server-Sent Events (SSE)
 - **Message history**: Automatically loads and displays recent messages on startup
@@ -12,7 +13,7 @@ An end-to-end encrypted Matrix/Element bot with a simple IRC-like web interface 
 - **Environment variable support**: Secure credential management for production deployments
 - Configuration via YAML file
 - Utility tool for generating authentication token hashes
-- No database required - all configuration in a single file
+- **Device verification**: Support for verifying bot device via Element client
 
 ## Prerequisites
 
@@ -51,7 +52,28 @@ web:
 # Optional: Message history settings
 message_history:
   limit: 50  # Number of messages to load
+
+# Optional: Encryption store settings
+store:
+  path: "./matrix_store"  # Directory for SQLite database
+  passphrase: ""          # Optional passphrase for encrypting the store
 ```
+
+### End-to-End Encryption Setup
+
+The bot automatically configures end-to-end encryption with the following features:
+
+1. **Persistent SQLite Store**: Encryption keys are stored in a local SQLite database (default: `./matrix_store`)
+2. **Automatic Cross-Signing**: The bot attempts to bootstrap cross-signing on first run
+3. **Device Verification**: To enable full E2EE functionality and avoid backup warnings:
+
+   - On first run, the bot will log messages about device verification
+   - Open Element on another device where you're logged in
+   - Go to Settings → Security & Privacy → Cross-signing
+   - Verify the new "Matrix Web Bot" device session
+   - Once verified, key backups will automatically be enabled
+
+**Note**: The warning `"Trying to backup room keys but no backup key was found"` will appear until you verify the device via another Element session. After verification, the bot will automatically join the backup system and the warning will stop.
 
 ### Generating Authentication Hash
 
@@ -73,6 +95,8 @@ All configuration values can be overridden using environment variables:
 - `MATRIX_USERNAME` - Bot username
 - `MATRIX_PASSWORD` - Bot password (recommended for secrets)
 - `MATRIX_ROOM_ID` - Room ID to join
+- `MATRIX_STORE_PATH` - Path to SQLite encryption store
+- `MATRIX_STORE_PASSPHRASE` - Passphrase for encryption store
 - `WEB_HOST` - Web server host
 - `WEB_PORT` - Web server port
 - `WEB_AUTH_HEADER_NAME` - Authentication header name
@@ -103,23 +127,29 @@ http://127.0.0.1:8080
 ## How It Works
 
 - The bot logs in to your Matrix homeserver with the provided credentials
+- It initializes E2EE with a persistent SQLite store to maintain encryption keys
+- Cross-signing is automatically set up (requires device verification via Element)
 - It joins the specified room and loads recent message history
 - The bot starts syncing new messages in real-time
 - The web interface loads message history and connects via SSE for real-time updates
 - Messages sent through the web interface are posted to the Matrix room
 - All messages in the room are displayed in the IRC-like interface
 - Optional header-based authentication protects the web interface when behind a reverse proxy
+- Encryption keys and device state persist across restarts in the `matrix_store` directory
 
 ## Architecture
 
-- **Bot Module** (`src/bot.rs`): Handles Matrix client, authentication, and message sync
+- **Bot Module** (`src/bot.rs`): Handles Matrix client, E2EE, authentication, and message sync
 - **Web Module** (`src/web.rs`): Axum-based web server with REST API and SSE endpoints
-- **Config Module** (`src/config.rs`): YAML configuration parsing
+- **Config Module** (`src/config.rs`): YAML configuration parsing with environment variable overrides
 - **Frontend** (`static/index.html`): Single-page IRC-like interface
 
 ## Security
 
-- The bot supports end-to-end encryption through matrix-sdk
+- **End-to-end encryption**: All messages in encrypted rooms are automatically encrypted/decrypted
+- **Persistent encryption state**: Keys are stored securely in an SQLite database (`matrix_store/`)
+- **Device verification**: Verify the bot device via Element to enable full E2EE features and key backups
+- **Store encryption**: Optionally protect the encryption store with a passphrase
 - Keep your `config.yaml` file secure as it contains credentials
 - The configuration file is in `.gitignore` to prevent accidental commits
 - See [SECURITY.md](SECURITY.md) for detailed security considerations
