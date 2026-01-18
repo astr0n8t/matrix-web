@@ -93,9 +93,6 @@ impl Config {
         if let Ok(val) = env::var("MATRIX_USERNAME") {
             self.username = val;
         }
-        if let Ok(val) = env::var("MATRIX_PASSWORD") {
-            self.password = val;
-        }
         if let Ok(val) = env::var("MATRIX_ROOM_ID") {
             self.room_id = val;
         }

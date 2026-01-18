@@ -29,6 +29,9 @@ impl CredentialStore {
     }
 
     /// Simple XOR encryption with key derived from sqlite password
+    /// Note: This provides basic encryption suitable for local storage.
+    /// The security relies on keeping the SQLite password secure.
+    /// For higher security needs, consider using AES with a KDF like Argon2.
     fn encrypt_password(&self, password: &str, sqlite_password: &str) -> Vec<u8> {
         let mut hasher = Sha256::new();
         hasher.update(sqlite_password.as_bytes());
@@ -69,6 +72,7 @@ impl CredentialStore {
     }
 
     /// Store credentials in the database
+    /// Note: This table stores only one set of credentials (id=1) for the bot
     pub fn store_credentials(
         &self,
         username: &str,
@@ -80,10 +84,10 @@ impl CredentialStore {
 
         let encrypted = self.encrypt_password(password, sqlite_password);
 
-        // Delete existing credentials
+        // Delete existing credentials (single credential storage)
         conn.execute("DELETE FROM credentials", [])?;
 
-        // Insert new credentials
+        // Insert new credentials with id=1
         conn.execute(
             "INSERT INTO credentials (id, username, password_encrypted) VALUES (1, ?1, ?2)",
             (username, encrypted),
@@ -94,6 +98,7 @@ impl CredentialStore {
     }
 
     /// Retrieve credentials from the database
+    /// Note: This table stores only one set of credentials (id=1) for the bot
     pub fn get_credentials(&self, sqlite_password: &str) -> Result<(String, String)> {
         let conn = Connection::open(&self.db_path)?;
         self.init_db(&conn)?;

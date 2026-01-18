@@ -114,7 +114,13 @@ async fn status_handler(
     State(state): State<Arc<AppState>>,
 ) -> impl IntoResponse {
     let connected = state.bot.is_connected().await;
-    let credentials_exist = state.credentials_store.credentials_exist().unwrap_or(false);
+    let credentials_exist = match state.credentials_store.credentials_exist() {
+        Ok(exists) => exists,
+        Err(e) => {
+            warn!("Failed to check credentials existence: {}", e);
+            false
+        }
+    };
     Json(StatusResponse { connected, credentials_exist })
 }
 
@@ -133,7 +139,19 @@ async fn login_handler(
     }
 
     // Check if credentials exist in the database
-    let credentials_exist = state.credentials_store.credentials_exist().unwrap_or(false);
+    let credentials_exist = match state.credentials_store.credentials_exist() {
+        Ok(exists) => exists,
+        Err(e) => {
+            warn!("Failed to check credentials: {}", e);
+            return (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(LoginResponse {
+                    success: false,
+                    error: Some(format!("Database error: {}", e)),
+                }),
+            );
+        }
+    };
     
     let matrix_password = if credentials_exist {
         // Retrieve stored credentials
