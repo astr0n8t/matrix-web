@@ -11,6 +11,8 @@ pub struct Config {
     pub web: WebConfig,
     #[serde(default)]
     pub message_history: MessageHistoryConfig,
+    #[serde(default)]
+    pub store: StoreConfig,
 }
 
 #[derive(Debug, Deserialize, Serialize)]
@@ -34,6 +36,14 @@ pub struct MessageHistoryConfig {
     pub limit: usize,
 }
 
+#[derive(Debug, Deserialize, Serialize)]
+pub struct StoreConfig {
+    #[serde(default = "default_store_path")]
+    pub path: String,
+    #[serde(default = "default_store_passphrase")]
+    pub passphrase: String,
+}
+
 impl Default for MessageHistoryConfig {
     fn default() -> Self {
         Self {
@@ -44,6 +54,23 @@ impl Default for MessageHistoryConfig {
 
 fn default_history_limit() -> usize {
     50
+}
+
+fn default_store_path() -> String {
+    "./matrix_store".to_string()
+}
+
+fn default_store_passphrase() -> String {
+    "".to_string()
+}
+
+impl Default for StoreConfig {
+    fn default() -> Self {
+        Self {
+            path: default_store_path(),
+            passphrase: default_store_passphrase(),
+        }
+    }
 }
 
 impl Config {
@@ -99,6 +126,14 @@ impl Config {
             if let Ok(limit) = val.parse::<usize>() {
                 self.message_history.limit = limit;
             }
+        }
+        
+        // Store configuration
+        if let Ok(val) = env::var("MATRIX_STORE_PATH") {
+            self.store.path = val;
+        }
+        if let Ok(val) = env::var("MATRIX_STORE_PASSPHRASE") {
+            self.store.passphrase = val;
         }
     }
 }

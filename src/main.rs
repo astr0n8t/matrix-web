@@ -22,6 +22,8 @@ async fn main() -> anyhow::Result<()> {
         &config.password,
         &config.room_id,
         config.message_history.limit,
+        &config.store.path,
+        &config.store.passphrase,
     )
     .await?;
 
