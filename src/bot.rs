@@ -45,9 +45,16 @@ impl MatrixBot {
             ..Default::default()
         };
         
+        // Use None for empty passphrase, Some for non-empty
+        let store_passphrase_opt = if store_passphrase.is_empty() {
+            None
+        } else {
+            Some(store_passphrase)
+        };
+        
         let client = Client::builder()
             .homeserver_url(homeserver)
-            .sqlite_store(store_path, Some(store_passphrase))
+            .sqlite_store(store_path, store_passphrase_opt)
             .with_encryption_settings(encryption_settings)
             .build()
             .await?;
@@ -86,33 +93,13 @@ impl MatrixBot {
         if let Some(cross_signing_status) = encryption.cross_signing_status().await {
             if !cross_signing_status.is_complete() {
                 info!("Cross-signing is not completely set up. Attempting to bootstrap...");
-                
-                // Bootstrap cross-signing if needed
-                if let Err(e) = encryption.bootstrap_cross_signing(None).await {
-                    warn!("Failed to bootstrap cross-signing: {}. This device may need to be verified via another Element session.", e);
-                    info!("To verify this device:");
-                    info!("1. Open Element on another device where you're logged in");
-                    info!("2. Go to Settings → Security & Privacy");
-                    info!("3. Verify this new device session");
-                } else {
-                    info!("Cross-signing bootstrapped successfully");
-                }
+                Self::try_bootstrap_cross_signing(&encryption).await;
             } else {
                 info!("Cross-signing is already complete");
             }
         } else {
             info!("Cross-signing is not available. Setting up cross-signing...");
-            
-            // Bootstrap cross-signing
-            if let Err(e) = encryption.bootstrap_cross_signing(None).await {
-                warn!("Failed to bootstrap cross-signing: {}. This device may need to be verified via another Element session.", e);
-                info!("To verify this device:");
-                info!("1. Open Element on another device where you're logged in");
-                info!("2. Go to Settings → Security & Privacy");
-                info!("3. Verify this new device session");
-            } else {
-                info!("Cross-signing bootstrapped successfully");
-            }
+            Self::try_bootstrap_cross_signing(&encryption).await;
         }
         
         // Note: Backups are automatically managed by the SDK when cross-signing is set up
@@ -123,6 +110,22 @@ impl MatrixBot {
         info!("2. Verify this new session to enable key backups");
         
         Ok(())
+    }
+    
+    async fn try_bootstrap_cross_signing(encryption: &matrix_sdk::encryption::Encryption) {
+        if let Err(e) = encryption.bootstrap_cross_signing(None).await {
+            warn!("Failed to bootstrap cross-signing: {}. This device may need to be verified via another Element session.", e);
+            Self::log_verification_instructions();
+        } else {
+            info!("Cross-signing bootstrapped successfully");
+        }
+    }
+    
+    fn log_verification_instructions() {
+        info!("To verify this device:");
+        info!("1. Open Element on another device where you're logged in");
+        info!("2. Go to Settings → Security & Privacy");
+        info!("3. Verify this new device session");
     }
 
     pub async fn join_room(&self) -> anyhow::Result<()> {

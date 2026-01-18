@@ -61,7 +61,7 @@ fn default_store_path() -> String {
 }
 
 fn default_store_passphrase() -> String {
-    "".to_string()
+    String::new()
 }
 
 impl Default for StoreConfig {
