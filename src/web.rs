@@ -37,9 +37,28 @@ pub struct MessageHistoryResponse {
     pub messages: Vec<String>,
 }
 
+#[derive(Deserialize)]
+pub struct LoginRequest {
+    pub passphrase: String,
+}
+
+#[derive(Serialize)]
+pub struct LoginResponse {
+    pub success: bool,
+    pub error: Option<String>,
+}
+
+#[derive(Serialize)]
+pub struct StatusResponse {
+    pub connected: bool,
+}
+
 pub fn create_router(state: AppState) -> Router {
     let router = Router::new()
         .route("/", get(index_handler))
+        .route("/api/login", post(login_handler))
+        .route("/api/logout", post(logout_handler))
+        .route("/api/status", get(status_handler))
         .route("/api/messages", post(send_message_handler))
         .route("/api/history", get(get_message_history_handler))
         .route("/api/stream", get(stream_messages_handler));
@@ -84,6 +103,78 @@ async fn auth_middleware(
 
 async fn index_handler() -> Html<&'static str> {
     Html(include_str!("../static/index.html"))
+}
+
+async fn status_handler(
+    State(state): State<Arc<AppState>>,
+) -> impl IntoResponse {
+    let connected = state.bot.is_connected().await;
+    Json(StatusResponse { connected })
+}
+
+async fn login_handler(
+    State(state): State<Arc<AppState>>,
+    Json(payload): Json<LoginRequest>,
+) -> impl IntoResponse {
+    if state.bot.is_connected().await {
+        return (
+            StatusCode::OK,
+            Json(LoginResponse {
+                success: true,
+                error: None,
+            }),
+        );
+    }
+
+    match state.bot.connect(&payload.passphrase).await {
+        Ok(_) => {
+            info!("Bot connected successfully");
+            (
+                StatusCode::OK,
+                Json(LoginResponse {
+                    success: true,
+                    error: None,
+                }),
+            )
+        }
+        Err(e) => {
+            warn!("Login failed: {}", e);
+            (
+                StatusCode::UNAUTHORIZED,
+                Json(LoginResponse {
+                    success: false,
+                    error: Some(format!("Failed to connect: {}", e)),
+                }),
+            )
+        }
+    }
+}
+
+async fn logout_handler(
+    State(state): State<Arc<AppState>>,
+) -> impl IntoResponse {
+    match state.bot.disconnect().await {
+        Ok(_) => {
+            info!("Bot disconnected successfully");
+            (
+                StatusCode::OK,
+                Json(LoginResponse {
+                    success: true,
+                    error: None,
+                }),
+            )
+        }
+        Err(e) => {
+            warn!("Logout failed: {}", e);
+            (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(LoginResponse {
+                    success: false,
+                    error: Some(format!("Failed to disconnect: {}", e)),
+                }),
+            )
+        }
+    }
 }
 
 async fn get_message_history_handler(

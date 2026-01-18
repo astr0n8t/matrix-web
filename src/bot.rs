@@ -12,7 +12,7 @@ use matrix_sdk::{
     Client,
 };
 use std::sync::Arc;
-use tokio::sync::{broadcast, RwLock};
+use tokio::sync::{broadcast, RwLock, Mutex};
 use tracing::{error, info, warn};
 
 pub type MessageSender = broadcast::Sender<String>;
@@ -20,23 +20,59 @@ pub type MessageReceiver = broadcast::Receiver<String>;
 
 #[derive(Clone)]
 pub struct MatrixBot {
-    client: Client,
+    homeserver: String,
+    username: String,
+    matrix_password: String,
     room_id: String,
+    store_path: String,
+    history_limit: usize,
+    client: Arc<Mutex<Option<Client>>>,
     message_tx: MessageSender,
     message_history: Arc<RwLock<Vec<String>>>,
+    sync_handle: Arc<Mutex<Option<tokio::task::JoinHandle<()>>>>,
 }
 
 impl MatrixBot {
-    pub async fn new(
+    pub fn new(
         homeserver: &str,
         username: &str,
         password: &str,
         room_id: &str,
         history_limit: usize,
         store_path: &str,
-        store_passphrase: &str,
-    ) -> anyhow::Result<(Self, MessageReceiver)> {
-        info!("Initializing Matrix client with store at: {}", store_path);
+    ) -> (Self, MessageReceiver) {
+        info!("Creating Matrix bot instance (not connected yet)");
+        
+        // Create broadcast channel for messages
+        let (message_tx, message_rx) = broadcast::channel(100);
+
+        let bot = MatrixBot {
+            homeserver: homeserver.to_string(),
+            username: username.to_string(),
+            matrix_password: password.to_string(),
+            room_id: room_id.to_string(),
+            store_path: store_path.to_string(),
+            history_limit,
+            client: Arc::new(Mutex::new(None)),
+            message_tx,
+            message_history: Arc::new(RwLock::new(Vec::with_capacity(history_limit))),
+            sync_handle: Arc::new(Mutex::new(None)),
+        };
+
+        (bot, message_rx)
+    }
+    
+    pub async fn is_connected(&self) -> bool {
+        self.client.lock().await.is_some()
+    }
+    
+    pub async fn connect(&self, store_passphrase: &str) -> anyhow::Result<()> {
+        // Check if already connected
+        if self.is_connected().await {
+            return Ok(());
+        }
+        
+        info!("Connecting to Matrix with store passphrase...");
         
         // Configure encryption settings
         let encryption_settings = EncryptionSettings {
@@ -53,16 +89,16 @@ impl MatrixBot {
         };
         
         let client = Client::builder()
-            .homeserver_url(homeserver)
-            .sqlite_store(store_path, store_passphrase_opt)
+            .homeserver_url(&self.homeserver)
+            .sqlite_store(&self.store_path, store_passphrase_opt)
             .with_encryption_settings(encryption_settings)
             .build()
             .await?;
 
-        info!("Logging in as {}", username);
+        info!("Logging in as {}", self.username);
         client
             .matrix_auth()
-            .login_username(username, password)
+            .login_username(&self.username, &self.matrix_password)
             .initial_device_display_name("Matrix Web Bot")
             .await?;
 
@@ -72,18 +108,45 @@ impl MatrixBot {
         if let Err(e) = Self::setup_encryption(&client).await {
             warn!("Failed to setup encryption: {}. You may need to verify this device via another session.", e);
         }
-
-        // Create broadcast channel for messages
-        let (message_tx, message_rx) = broadcast::channel(100);
-
-        let bot = MatrixBot {
-            client,
-            room_id: room_id.to_string(),
-            message_tx,
-            message_history: Arc::new(RwLock::new(Vec::with_capacity(history_limit))),
-        };
-
-        Ok((bot, message_rx))
+        
+        // Join room
+        let room_id = <&matrix_sdk::ruma::RoomId>::try_from(self.room_id.as_str())?;
+        client.join_room_by_id(room_id).await?;
+        info!("Joined room: {}", self.room_id);
+        
+        // Load message history
+        self.load_message_history_with_client(&client, self.history_limit).await?;
+        
+        // Start sync in background
+        self.start_sync_with_client(client.clone()).await;
+        
+        // Store client
+        *self.client.lock().await = Some(client);
+        
+        info!("Bot connected and syncing");
+        Ok(())
+    }
+    
+    pub async fn disconnect(&self) -> anyhow::Result<()> {
+        info!("Disconnecting from Matrix...");
+        
+        // Stop sync task
+        if let Some(handle) = self.sync_handle.lock().await.take() {
+            handle.abort();
+        }
+        
+        // Logout
+        if let Some(client) = self.client.lock().await.take() {
+            if let Err(e) = client.matrix_auth().logout().await {
+                warn!("Error during logout: {}", e);
+            }
+        }
+        
+        // Clear message history
+        self.message_history.write().await.clear();
+        
+        info!("Bot disconnected");
+        Ok(())
     }
     
     async fn setup_encryption(client: &Client) -> anyhow::Result<()> {
@@ -128,27 +191,17 @@ impl MatrixBot {
         info!("3. Verify this new device session");
     }
 
-    pub async fn join_room(&self) -> anyhow::Result<()> {
+    async fn load_message_history_with_client(&self, client: &Client, limit: usize) -> anyhow::Result<()> {
         let room_id = <&matrix_sdk::ruma::RoomId>::try_from(self.room_id.as_str())?;
         
-        // Try to join the room
-        self.client.join_room_by_id(room_id).await?;
-        info!("Joined room: {}", self.room_id);
-        
-        Ok(())
-    }
-
-    pub async fn load_message_history(&self, limit: usize) -> anyhow::Result<()> {
-        let room_id = <&matrix_sdk::ruma::RoomId>::try_from(self.room_id.as_str())?;
-        
-        if self.client.get_room(room_id).is_some() {
+        if client.get_room(room_id).is_some() {
             info!("Loading message history (limit: {})", limit);
             
             // Get room messages
             let mut request = get_message_events::v3::Request::backward(room_id.to_owned());
             request.limit = UInt::new(limit as u64).unwrap_or(UInt::new(50).unwrap());
             
-            match self.client.send(request, None).await {
+            match client.send(request, None).await {
                 Ok(response) => {
                     let mut history = Vec::new();
                     
@@ -181,15 +234,80 @@ impl MatrixBot {
         Ok(())
     }
 
+    async fn start_sync_with_client(&self, client: Client) {
+        let bot_for_sync = self.clone();
+        let room_id = self.room_id.clone();
+        
+        let handle = tokio::spawn(async move {
+            // Register event handler for incoming messages
+            client.add_event_handler(
+                move |event: OriginalSyncRoomMessageEvent, room: Room| {
+                    let bot = bot_for_sync.clone();
+                    let room_id_clone = room_id.clone();
+                    async move {
+                        if room.room_id().as_str() != room_id_clone {
+                            return;
+                        }
+
+                        let sender = event.sender.to_string();
+                        let message = match event.content.msgtype {
+                            MessageType::Text(text) => text.body.clone(),
+                            _ => return,
+                        };
+
+                        let formatted_message = format!("{}: {}", sender, message);
+                        info!("Received message: {}", formatted_message);
+                        
+                        // Add to history
+                        let mut history = bot.message_history.write().await;
+                        history.push(formatted_message.clone());
+                        
+                        // Broadcast to web clients
+                        let _ = bot.message_tx.send(formatted_message);
+                    }
+                },
+            );
+
+            info!("Starting sync loop");
+            if let Err(e) = client.sync(SyncSettings::default()).await {
+                error!("Sync error: {}", e);
+            }
+        });
+        
+        *self.sync_handle.lock().await = Some(handle);
+    }
+
+    pub async fn join_room(&self) -> anyhow::Result<()> {
+        let client_guard = self.client.lock().await;
+        let client = client_guard.as_ref().ok_or_else(|| anyhow::anyhow!("Not connected"))?;
+        
+        let room_id = <&matrix_sdk::ruma::RoomId>::try_from(self.room_id.as_str())?;
+        
+        // Try to join the room
+        client.join_room_by_id(room_id).await?;
+        info!("Joined room: {}", self.room_id);
+        
+        Ok(())
+    }
+
+    pub async fn load_message_history(&self, limit: usize) -> anyhow::Result<()> {
+        let client_guard = self.client.lock().await;
+        let client = client_guard.as_ref().ok_or_else(|| anyhow::anyhow!("Not connected"))?;
+        self.load_message_history_with_client(client, limit).await
+    }
+
     pub async fn get_message_history(&self) -> Vec<String> {
         let history = self.message_history.read().await;
         history.clone()
     }
 
     pub async fn send_message(&self, message: &str) -> anyhow::Result<()> {
+        let client_guard = self.client.lock().await;
+        let client = client_guard.as_ref().ok_or_else(|| anyhow::anyhow!("Not connected"))?;
+        
         let room_id = <&matrix_sdk::ruma::RoomId>::try_from(self.room_id.as_str())?;
         
-        if let Some(room) = self.client.get_room(room_id) {
+        if let Some(room) = client.get_room(room_id) {
             let content = RoomMessageEventContent::text_plain(message);
             room.send(content).await?;
             info!("Sent message to room");
@@ -202,40 +320,8 @@ impl MatrixBot {
     }
 
     pub async fn start_sync(self) -> anyhow::Result<()> {
-        let bot = Arc::new(self);
-        let bot_clone = bot.clone();
-
-        // Register event handler for incoming messages
-        bot.client.add_event_handler(
-            move |event: OriginalSyncRoomMessageEvent, room: Room| {
-                let bot = bot_clone.clone();
-                async move {
-                    if room.room_id().as_str() != bot.room_id {
-                        return;
-                    }
-
-                    let sender = event.sender.to_string();
-                    let message = match event.content.msgtype {
-                        MessageType::Text(text) => text.body.clone(),
-                        _ => return,
-                    };
-
-                    let formatted_message = format!("{}: {}", sender, message);
-                    info!("Received message: {}", formatted_message);
-                    
-                    // Add to history
-                    let mut history = bot.message_history.write().await;
-                    history.push(formatted_message.clone());
-                    
-                    // Broadcast to web clients
-                    let _ = bot.message_tx.send(formatted_message);
-                }
-            },
-        );
-
-        info!("Starting sync loop");
-        bot.client.sync(SyncSettings::default()).await?;
-
+        // This method is no longer used in the new architecture
+        // Sync is started automatically by connect()
         Ok(())
     }
 

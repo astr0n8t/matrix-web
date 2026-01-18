@@ -24,12 +24,32 @@
             background-color: #000000;
             padding: 15px 20px;
             border-bottom: 2px solid #00ff00;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
         }
 
         h1 {
             font-size: 1.5em;
             color: #00ff00;
             text-shadow: 0 0 10px #00ff00;
+        }
+
+        #logout-button {
+            padding: 8px 16px;
+            background-color: #330000;
+            color: #ff0000;
+            border: 1px solid #ff0000;
+            cursor: pointer;
+            font-family: 'Courier New', monospace;
+            font-size: 12px;
+            transition: all 0.2s;
+        }
+
+        #logout-button:hover {
+            background-color: #ff0000;
+            color: #000000;
+            box-shadow: 0 0 10px #ff0000;
         }
 
         #messages {
@@ -144,11 +164,118 @@
         #messages::-webkit-scrollbar-thumb:hover {
             background: #00ff00;
         }
+
+        /* Login Modal */
+        #login-modal {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background-color: rgba(0, 0, 0, 0.95);
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            z-index: 1000;
+        }
+
+        #login-modal.hidden {
+            display: none;
+        }
+
+        .login-box {
+            background-color: #0a0a0a;
+            border: 2px solid #00ff00;
+            box-shadow: 0 0 20px #00ff00;
+            padding: 40px;
+            max-width: 400px;
+            width: 90%;
+        }
+
+        .login-box h2 {
+            color: #00ff00;
+            text-shadow: 0 0 10px #00ff00;
+            margin-bottom: 20px;
+            text-align: center;
+        }
+
+        .login-box p {
+            color: #00cc00;
+            margin-bottom: 20px;
+            line-height: 1.5;
+        }
+
+        .login-box input[type="password"] {
+            width: 100%;
+            padding: 12px;
+            background-color: #0a0a0a;
+            border: 1px solid #00ff00;
+            color: #00ff00;
+            font-family: 'Courier New', monospace;
+            font-size: 14px;
+            margin-bottom: 20px;
+        }
+
+        .login-box input[type="password"]:focus {
+            outline: none;
+            border-color: #00ff00;
+            box-shadow: 0 0 10px #00ff00;
+        }
+
+        .login-box button {
+            width: 100%;
+            padding: 12px;
+            background-color: #003300;
+            color: #00ff00;
+            border: 1px solid #00ff00;
+            cursor: pointer;
+            font-family: 'Courier New', monospace;
+            font-size: 14px;
+            transition: all 0.2s;
+        }
+
+        .login-box button:hover {
+            background-color: #00ff00;
+            color: #000000;
+            box-shadow: 0 0 10px #00ff00;
+        }
+
+        .login-box button:disabled {
+            background-color: #0a0a0a;
+            color: #004400;
+            border-color: #004400;
+            cursor: not-allowed;
+        }
+
+        .login-box .error {
+            color: #ff0000;
+            text-shadow: 0 0 5px #ff0000;
+            margin-top: 10px;
+            text-align: center;
+        }
     </style>
 </head>
 <body>
+    <!-- Login Modal -->
+    <div id="login-modal">
+        <div class="login-box">
+            <h2>Matrix Web Bot</h2>
+            <p>Enter the SQLite store passphrase to connect to the Matrix server:</p>
+            <input 
+                type="password" 
+                id="passphrase-input" 
+                placeholder="Store passphrase (leave empty if none)"
+                autocomplete="off"
+            />
+            <button id="login-button">Connect</button>
+            <div id="login-error" class="error" style="display: none;"></div>
+        </div>
+    </div>
+
+    <!-- Main Interface -->
     <header>
         <h1>Matrix Web Bot - IRC-like Interface</h1>
+        <button id="logout-button" style="display: none;">Disconnect</button>
     </header>
 
     <div id="messages"></div>
@@ -159,12 +286,13 @@
             id="message-input" 
             placeholder="Type your message here..." 
             autocomplete="off"
+            disabled
         />
-        <button id="send-button">Send</button>
+        <button id="send-button" disabled>Send</button>
     </div>
 
     <div id="status">
-        Status: <span id="connection-status" class="status-disconnected">Connecting...</span>
+        Status: <span id="connection-status" class="status-disconnected">Not Connected</span>
     </div>
 
     <script>
@@ -172,8 +300,14 @@
         const messageInput = document.getElementById('message-input');
         const sendButton = document.getElementById('send-button');
         const connectionStatus = document.getElementById('connection-status');
+        const loginModal = document.getElementById('login-modal');
+        const passphraseInput = document.getElementById('passphrase-input');
+        const loginButton = document.getElementById('login-button');
+        const loginError = document.getElementById('login-error');
+        const logoutButton = document.getElementById('logout-button');
 
         let eventSource = null;
+        let isConnected = false;
 
         // Auto-scroll to bottom
         function scrollToBottom() {
@@ -200,6 +334,86 @@
             scrollToBottom();
         }
 
+        // Check connection status
+        async function checkStatus() {
+            try {
+                const response = await fetch('/api/status');
+                if (response.ok) {
+                    const data = await response.json();
+                    return data.connected;
+                }
+            } catch (error) {
+                console.error('Failed to check status:', error);
+            }
+            return false;
+        }
+
+        // Login to Matrix
+        async function login() {
+            const passphrase = passphraseInput.value;
+            loginButton.disabled = true;
+            loginError.style.display = 'none';
+
+            try {
+                const response = await fetch('/api/login', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({ passphrase }),
+                });
+
+                const result = await response.json();
+                
+                if (result.success) {
+                    isConnected = true;
+                    loginModal.classList.add('hidden');
+                    messageInput.disabled = false;
+                    sendButton.disabled = false;
+                    logoutButton.style.display = 'block';
+                    connectionStatus.textContent = 'Connected';
+                    connectionStatus.className = 'status-connected';
+                    
+                    // Load message history and start streaming
+                    await loadMessageHistory();
+                    connectToStream();
+                } else {
+                    loginError.textContent = result.error || 'Login failed';
+                    loginError.style.display = 'block';
+                }
+            } catch (error) {
+                loginError.textContent = 'Connection error: ' + error.message;
+                loginError.style.display = 'block';
+            } finally {
+                loginButton.disabled = false;
+            }
+        }
+
+        // Logout from Matrix
+        async function logout() {
+            try {
+                await fetch('/api/logout', { method: 'POST' });
+                
+                if (eventSource) {
+                    eventSource.close();
+                    eventSource = null;
+                }
+                
+                isConnected = false;
+                messageInput.disabled = true;
+                sendButton.disabled = true;
+                logoutButton.style.display = 'none';
+                connectionStatus.textContent = 'Not Connected';
+                connectionStatus.className = 'status-disconnected';
+                messagesDiv.innerHTML = '';
+                passphraseInput.value = '';
+                loginModal.classList.remove('hidden');
+                passphraseInput.focus();
+            } catch (error) {
+                console.error('Logout error:', error);
+            }
+        }
+
         // Load message history
         async function loadMessageHistory() {
             try {
@@ -223,7 +437,7 @@
         // Send message to server
         async function sendMessage() {
             const message = messageInput.value.trim();
-            if (!message) return;
+            if (!message || !isConnected) return;
 
             sendButton.disabled = true;
             
@@ -253,6 +467,8 @@
 
         // Connect to message stream
         function connectToStream() {
+            if (!isConnected) return;
+
             eventSource = new EventSource('/api/stream');
             
             eventSource.onopen = () => {
@@ -261,29 +477,41 @@
             };
             
             eventSource.onmessage = (event) => {
-                // Parse message format: "sender: message"
-                // Matrix IDs contain colons (@user:homeserver.org: message)
-                // So we need to find the first ": " (colon followed by space) after the sender
                 const data = event.data;
                 const colonSpaceIndex = data.indexOf(': ');
                 if (colonSpaceIndex > 0) {
                     const sender = data.substring(0, colonSpaceIndex);
-                    const content = data.substring(colonSpaceIndex + 2); // +2 to skip ': '
+                    const content = data.substring(colonSpaceIndex + 2);
                     addMessage(sender, content);
                 }
             };
             
             eventSource.onerror = () => {
-                connectionStatus.textContent = 'Disconnected';
+                connectionStatus.textContent = 'Connection Lost';
                 connectionStatus.className = 'status-disconnected';
-                eventSource.close();
+                if (eventSource) {
+                    eventSource.close();
+                    eventSource = null;
+                }
                 
-                // Reconnect after 5 seconds
-                setTimeout(connectToStream, 5000);
+                // Try to reconnect if still supposed to be connected
+                if (isConnected) {
+                    setTimeout(connectToStream, 5000);
+                }
             };
         }
 
         // Event listeners
+        loginButton.addEventListener('click', login);
+        
+        passphraseInput.addEventListener('keypress', (e) => {
+            if (e.key === 'Enter') {
+                login();
+            }
+        });
+
+        logoutButton.addEventListener('click', logout);
+        
         sendButton.addEventListener('click', sendMessage);
         
         messageInput.addEventListener('keypress', (e) => {
@@ -292,10 +520,30 @@
             }
         });
 
-        // Initialize
-        loadMessageHistory().then(() => {
-            connectToStream();
-            messageInput.focus();
+        // Handle page unload to disconnect
+        window.addEventListener('beforeunload', async (e) => {
+            if (isConnected) {
+                // Try to logout (may not complete before page closes)
+                navigator.sendBeacon('/api/logout');
+            }
+        });
+
+        // Initialize - check if already connected
+        checkStatus().then(connected => {
+            if (connected) {
+                isConnected = true;
+                loginModal.classList.add('hidden');
+                messageInput.disabled = false;
+                sendButton.disabled = false;
+                logoutButton.style.display = 'block';
+                connectionStatus.textContent = 'Connected';
+                connectionStatus.className = 'status-connected';
+                loadMessageHistory().then(() => {
+                    connectToStream();
+                });
+            } else {
+                passphraseInput.focus();
+            }
         });
     </script>
 </body>
