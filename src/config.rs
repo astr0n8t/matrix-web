@@ -6,6 +6,7 @@ use std::env;
 pub struct Config {
     pub homeserver: String,
     pub username: String,
+    #[serde(default)]
     pub password: String,
     pub room_id: String,
     pub web: WebConfig,
@@ -91,9 +92,6 @@ impl Config {
         }
         if let Ok(val) = env::var("MATRIX_USERNAME") {
             self.username = val;
-        }
-        if let Ok(val) = env::var("MATRIX_PASSWORD") {
-            self.password = val;
         }
         if let Ok(val) = env::var("MATRIX_ROOM_ID") {
             self.room_id = val;
