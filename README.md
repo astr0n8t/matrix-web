@@ -91,6 +91,7 @@ echo -n "your-secret-token" | sha256sum
 
 All configuration values can be overridden using environment variables:
 
+- `DATABASE_PATH` - Path to credentials database
 - `MATRIX_HOMESERVER` - Matrix homeserver URL
 - `MATRIX_USERNAME` - Bot username
 - `MATRIX_ROOM_ID` - Room ID to join
@@ -134,13 +135,97 @@ http://127.0.0.1:8080
    - Click the "Disconnect" button in the header to log out from the Matrix server
    - The bot will also automatically disconnect when you close the browser tab
 
+## Docker Deployment
+
+The application is designed to run in Docker with persistent storage for encryption keys and credentials.
+
+### Building the Docker Image
+
+```bash
+docker build -t matrix-web .
+```
+
+### Running with Docker
+
+The container uses `/data` as the working directory for storing:
+- `matrix.db` - Encrypted credentials database
+- `matrix_store/` - Matrix SDK encryption store (E2EE keys)
+
+**Important:** Mount a volume to `/data` to persist data across container restarts:
+
+```bash
+# Create a directory for persistent data
+mkdir -p ./matrix-data
+
+# Run with volume mount
+docker run -d \
+  -p 8080:8080 \
+  -v ./matrix-data:/data \
+  -v ./config.yaml:/config.yaml:ro \
+  matrix-web
+```
+
+### Docker Compose Example
+
+```yaml
+version: '3.8'
+services:
+  matrix-web:
+    image: matrix-web
+    build: .
+    ports:
+      - "8080:8080"
+    volumes:
+      - ./matrix-data:/data
+      - ./config.yaml:/config.yaml:ro
+    environment:
+      - RUST_LOG=info
+      # Optional: Override config with environment variables
+      # - MATRIX_HOMESERVER=https://matrix.org
+      # - MATRIX_USERNAME=your_bot_username
+      # - MATRIX_ROOM_ID=!room:matrix.org
+    restart: unless-stopped
+```
+
+### Environment Variables for Docker
+
+All configuration options can be set via environment variables, which is useful for Docker deployments:
+
+- `DATABASE_PATH` - Path to credentials database (default: `./matrix.db`)
+- `MATRIX_STORE_PATH` - Path to encryption store (default: `./matrix_store`)
+- `MATRIX_STORE_PASSPHRASE` - Passphrase for encrypting the store
+- `MATRIX_HOMESERVER` - Matrix homeserver URL
+- `MATRIX_USERNAME` - Bot username
+- `MATRIX_ROOM_ID` - Room ID to join
+- `WEB_HOST` - Web server host (default: `127.0.0.1`, use `0.0.0.0` for Docker)
+- `WEB_PORT` - Web server port
+- `WEB_AUTH_HEADER_NAME` - Authentication header name
+- `WEB_AUTH_HEADER_VALUE` - Authentication header value (hashed automatically)
+- `MESSAGE_HISTORY_LIMIT` - Number of messages to load
+
+Example with environment variables:
+
+```bash
+docker run -d \
+  -p 8080:8080 \
+  -v ./matrix-data:/data \
+  -e MATRIX_HOMESERVER=https://matrix.org \
+  -e MATRIX_USERNAME=mybot \
+  -e MATRIX_ROOM_ID='!room:matrix.org' \
+  -e WEB_HOST=0.0.0.0 \
+  -e MATRIX_STORE_PASSPHRASE=my-secure-passphrase \
+  matrix-web
+```
+
+**Note:** When running in Docker, set `WEB_HOST=0.0.0.0` to allow connections from outside the container.
+
 ## How It Works
 
 - The web server starts but the bot does NOT connect to Matrix on startup
 - When you access the web interface, a login modal prompts for credentials:
   - **First launch**: Enter both Matrix password and SQLite database password
   - **Subsequent launches**: Enter only the SQLite database password
-- The Matrix password is encrypted using the SQLite password and stored in `credentials.db`
+- The Matrix password is encrypted using the SQLite password and stored in the database file (default: `./matrix.db`, `/data/matrix.db` in Docker)
 - After you enter your credentials, the bot connects to your Matrix homeserver
 - The bot initializes E2EE with a persistent SQLite store using the provided passphrase
 - Cross-signing is automatically set up (requires device verification via Element)
@@ -148,8 +233,8 @@ http://127.0.0.1:8080
 - Real-time syncing begins and messages are displayed in the IRC-like interface
 - Messages sent through the web interface are posted to the Matrix room
 - When you disconnect, the bot logs out from Matrix and clears the session
-- Encryption keys and device state persist in the `matrix_store` directory across sessions
-- Matrix credentials persist in encrypted form in the `credentials.db` file
+- Encryption keys and device state persist in the Matrix store directory (default: `./matrix_store`, `/data/matrix_store` in Docker)
+- Matrix credentials persist in encrypted form in the database file
 - Optional header-based authentication protects the web interface when behind a reverse proxy
 
 ## Architecture
@@ -162,13 +247,14 @@ http://127.0.0.1:8080
 ## Security
 
 - **End-to-end encryption**: All messages in encrypted rooms are automatically encrypted/decrypted
-- **Persistent encryption state**: Keys are stored securely in an SQLite database (`matrix_store/`)
+- **Persistent encryption state**: Keys are stored securely in an SQLite database (default: `./matrix_store`, `/data/matrix_store` in Docker)
 - **Device verification**: Verify the bot device via Element to enable full E2EE features and key backups
 - **Store encryption**: Optionally protect the encryption store with a passphrase
-- **Credential encryption**: Matrix credentials are encrypted and stored locally in `credentials.db`
+- **Credential encryption**: Matrix credentials are encrypted and stored locally (default: `./matrix.db`, `/data/matrix.db` in Docker)
 - **No plaintext passwords**: Passwords are never stored in plaintext in configuration files
 - The configuration file is in `.gitignore` to prevent accidental commits
-- Keep your `credentials.db` and `matrix_store/` directories secure
+- Keep your database file and Matrix store directory secure
+- When using Docker, ensure the `/data` volume has appropriate permissions
 - See [SECURITY.md](SECURITY.md) for detailed security considerations
 
 ## License
