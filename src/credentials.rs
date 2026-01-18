@@ -84,8 +84,8 @@ impl CredentialStore {
 
         let encrypted = self.encrypt_password(password, sqlite_password);
 
-        // Delete existing credentials (single credential storage)
-        conn.execute("DELETE FROM credentials", [])?;
+        // Delete existing credentials with id=1 (single credential storage)
+        conn.execute("DELETE FROM credentials WHERE id = 1", [])?;
 
         // Insert new credentials with id=1
         conn.execute(
