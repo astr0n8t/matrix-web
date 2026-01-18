@@ -41,3 +41,9 @@ web:
 # Optional: defaults to 50 if not specified
 message_history:
   limit: 50  # Number of historical messages to load on startup
+
+# SQLite store configuration for encryption state
+# Optional: defaults shown below
+store:
+  path: "./matrix_store"  # Directory path for SQLite database
+  passphrase: ""          # Optional passphrase for encrypting the store (recommended for production)

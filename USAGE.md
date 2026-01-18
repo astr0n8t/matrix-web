@@ -146,6 +146,8 @@ cargo build --release
 ## Using the Web Interface
 
 1. **Start the bot** using one of the methods above
+   - The web server starts immediately
+   - The bot does NOT connect to Matrix yet - it waits for your passphrase
 
 2. **Open your browser** and navigate to:
    ```
@@ -153,15 +155,27 @@ cargo build --release
    ```
    (or the host:port you configured)
 
-3. **Send messages**:
+3. **Enter your SQLite store passphrase**:
+   - A login modal will appear when you first access the interface
+   - Enter the passphrase configured in `store.passphrase` in config.yaml
+   - Leave it empty if you didn't configure a passphrase
+   - Click "Connect" or press Enter
+   - The bot will now connect to Matrix using this passphrase
+
+4. **Send messages**:
    - Type your message in the input box at the bottom
    - Press Enter or click "Send"
    - Your message will be posted to the Matrix room
 
-4. **Receive messages**:
-   - Previous messages are loaded automatically on startup (configurable limit)
+5. **Receive messages**:
+   - Previous messages are loaded automatically after connection (configurable limit)
    - All new messages in the Matrix room will appear in real-time
    - Messages are displayed in IRC-like format: `@user:homeserver: message`
+
+6. **Disconnect**:
+   - Click the "Disconnect" button in the header to log out from Matrix
+   - The bot will disconnect, clear the session, and show the login modal again
+   - The bot also automatically disconnects when you close the browser tab
 
 ## Features
 
@@ -182,10 +196,35 @@ Optional authentication using HTTP headers for reverse proxy setups:
 
 ### End-to-End Encryption (E2EE)
 
-The bot supports E2EE automatically through matrix-sdk:
-- First time the bot joins an encrypted room, it will set up encryption
-- Encryption keys are stored in the SQLite database (created automatically)
-- The bot can send and receive encrypted messages
+The bot fully supports E2EE with automatic setup:
+
+#### Initial Setup
+- **Persistent Store**: Encryption keys are stored in a SQLite database (default: `./matrix_store`)
+- **Auto Cross-Signing**: The bot automatically bootstraps cross-signing on first run
+- **Auto Backups**: Backup support is automatically enabled when the device is verified
+
+#### Device Verification
+To enable full E2EE functionality and resolve the backup key warning:
+
+1. **Start the bot** for the first time - it will log initialization messages
+2. **Open Element** on another device where you're logged in
+3. **Navigate to Settings → Security & Privacy**
+4. **Look for "Matrix Web Bot"** in the devices list (or check for unverified sessions)
+5. **Verify the device** by following Element's verification prompts
+6. **Wait a moment** - the bot will automatically join the backup system once verified
+
+#### What Happens During Verification
+- The bot's device gets trusted by your account
+- Cross-signing keys are exchanged
+- Key backups are automatically enabled
+- The warning `"Trying to backup room keys but no backup key was found"` stops appearing
+- The bot can now fully participate in encrypted rooms
+
+#### Encryption Store Management
+- **Location**: Configured via `store.path` in config (default: `./matrix_store`)
+- **Passphrase**: Optional encryption via `store.passphrase` for additional security
+- **Backup**: Keep this directory backed up to preserve encryption state across reinstalls
+- **Reset**: Delete the `matrix_store` directory to start fresh (requires re-verification)
 
 ### Real-time Updates
 
@@ -212,6 +251,18 @@ The bot supports E2EE automatically through matrix-sdk:
 - Check that the bot is running
 - Verify the web server is accessible at the configured host:port
 - Check browser console for error messages
+
+### Encryption warnings or errors
+
+**Warning: "Trying to backup room keys but no backup key was found"**
+- This is expected on first run before device verification
+- Verify the bot device via Element (see E2EE section above)
+- The warning will stop once verification is complete
+
+**Error: "Failed to decrypt message"**
+- Ensure the bot device has been verified via Element
+- Check that the `matrix_store` directory exists and is readable
+- Try deleting `matrix_store` and restarting (requires re-verification)
 
 ### Build errors
 
@@ -243,10 +294,12 @@ cargo build --release
    - To allow external access, change host to "0.0.0.0" and use a reverse proxy
    - Consider adding authentication if exposing to the internet
 
-4. **E2EE**:
-   - Encryption database is stored locally
-   - Backup the database if you need to preserve encryption keys
-   - Delete the database to reset encryption state
+4. **E2EE and Encryption Store**:
+   - Encryption database is stored in `./matrix_store` (configurable)
+   - **Backup this directory** to preserve encryption keys across reinstalls
+   - Optionally protect the store with a passphrase via `store.passphrase`
+   - Delete the `matrix_store` directory to reset encryption state (requires re-verification)
+   - **Important**: Verify the bot device via Element to enable full E2EE and stop backup warnings
 
 ## Advanced Configuration
 
