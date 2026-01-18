@@ -260,11 +260,18 @@
     <div id="login-modal">
         <div class="login-box">
             <h2>Matrix Web Bot</h2>
-            <p>Enter the SQLite store passphrase to connect to the Matrix server:</p>
+            <p id="login-instructions">Enter your Matrix password and SQLite database password to connect:</p>
             <input 
                 type="password" 
-                id="passphrase-input" 
-                placeholder="Store passphrase (leave empty if none)"
+                id="matrix-password-input" 
+                placeholder="Matrix password"
+                autocomplete="off"
+                style="display: block;"
+            />
+            <input 
+                type="password" 
+                id="sqlite-password-input" 
+                placeholder="SQLite database password"
                 autocomplete="off"
             />
             <button id="login-button">Connect</button>
@@ -300,13 +307,16 @@
         const sendButton = document.getElementById('send-button');
         const connectionStatus = document.getElementById('connection-status');
         const loginModal = document.getElementById('login-modal');
-        const passphraseInput = document.getElementById('passphrase-input');
+        const loginInstructions = document.getElementById('login-instructions');
+        const matrixPasswordInput = document.getElementById('matrix-password-input');
+        const sqlitePasswordInput = document.getElementById('sqlite-password-input');
         const loginButton = document.getElementById('login-button');
         const loginError = document.getElementById('login-error');
         const logoutButton = document.getElementById('logout-button');
 
         let eventSource = null;
         let isConnected = false;
+        let credentialsExist = false;
 
         // Auto-scroll to bottom
         function scrollToBottom() {
@@ -339,6 +349,7 @@
                 const response = await fetch('/api/status');
                 if (response.ok) {
                     const data = await response.json();
+                    credentialsExist = data.credentials_exist;
                     return data.connected;
                 }
             } catch (error) {
@@ -349,17 +360,35 @@
 
         // Login to Matrix
         async function login() {
-            const passphrase = passphraseInput.value;
+            const matrixPassword = matrixPasswordInput.value;
+            const sqlitePassword = sqlitePasswordInput.value;
+            
+            // Validate inputs
+            if (!credentialsExist && !matrixPassword) {
+                loginError.textContent = 'Matrix password is required for first login';
+                loginError.style.display = 'block';
+                return;
+            }
+            
             loginButton.disabled = true;
             loginError.style.display = 'none';
 
             try {
+                const requestBody = {
+                    sqlite_password: sqlitePassword
+                };
+                
+                // Only include matrix_password if credentials don't exist
+                if (!credentialsExist) {
+                    requestBody.matrix_password = matrixPassword;
+                }
+                
                 const response = await fetch('/api/login', {
                     method: 'POST',
                     headers: {
                         'Content-Type': 'application/json',
                     },
-                    body: JSON.stringify({ passphrase }),
+                    body: JSON.stringify(requestBody),
                 });
 
                 const result = await response.json();
@@ -405,9 +434,15 @@
                 connectionStatus.textContent = 'Not Connected';
                 connectionStatus.className = 'status-disconnected';
                 messagesDiv.innerHTML = '';
-                passphraseInput.value = '';
+                matrixPasswordInput.value = '';
+                sqlitePasswordInput.value = '';
                 loginModal.classList.remove('hidden');
-                passphraseInput.focus();
+                
+                // Update UI based on credentials status
+                await checkStatus();
+                updateLoginForm();
+                
+                sqlitePasswordInput.focus();
             } catch (error) {
                 console.error('Logout error:', error);
             }
@@ -503,7 +538,13 @@
         // Event listeners
         loginButton.addEventListener('click', login);
         
-        passphraseInput.addEventListener('keypress', (e) => {
+        matrixPasswordInput.addEventListener('keypress', (e) => {
+            if (e.key === 'Enter') {
+                sqlitePasswordInput.focus();
+            }
+        });
+        
+        sqlitePasswordInput.addEventListener('keypress', (e) => {
             if (e.key === 'Enter') {
                 login();
             }
@@ -527,8 +568,22 @@
             }
         });
 
+        // Update login form based on whether credentials exist
+        function updateLoginForm() {
+            if (credentialsExist) {
+                loginInstructions.textContent = 'Enter your SQLite database password to connect:';
+                matrixPasswordInput.style.display = 'none';
+                sqlitePasswordInput.placeholder = 'SQLite database password';
+            } else {
+                loginInstructions.textContent = 'Enter your Matrix password and SQLite database password to connect:';
+                matrixPasswordInput.style.display = 'block';
+                sqlitePasswordInput.placeholder = 'SQLite database password';
+            }
+        }
+
         // Initialize - check if already connected
         checkStatus().then(connected => {
+            updateLoginForm();
             if (connected) {
                 isConnected = true;
                 loginModal.classList.add('hidden');
@@ -541,7 +596,11 @@
                     connectToStream();
                 });
             } else {
-                passphraseInput.focus();
+                if (credentialsExist) {
+                    sqlitePasswordInput.focus();
+                } else {
+                    matrixPasswordInput.focus();
+                }
             }
         });
     </script>

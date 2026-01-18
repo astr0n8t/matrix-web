@@ -1,11 +1,14 @@
 # Matrix Bot Configuration
 # Copy this file to config.yaml and fill in your details
 #
+# IMPORTANT: Password is no longer stored in config!
+# On first launch, you will be prompted for your Matrix password via the web interface.
+# The password will be encrypted and stored in a local SQLite database (credentials.db).
+#
 # Environment Variable Support:
 # All values can be overridden using environment variables:
 #   MATRIX_HOMESERVER - Matrix homeserver URL
 #   MATRIX_USERNAME - Bot username
-#   MATRIX_PASSWORD - Bot password (recommended for security)
 #   MATRIX_ROOM_ID - Room ID to join
 #   WEB_HOST - Web server host
 #   WEB_PORT - Web server port
@@ -18,7 +21,7 @@ homeserver: "https://matrix.org"
 
 # Bot credentials
 username: "your_bot_username"
-password: "your_bot_password"
+# password is no longer stored here - you will be prompted on first launch
 
 # Room to join and monitor
 room_id: "!room:matrix.org"

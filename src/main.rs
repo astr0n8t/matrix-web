@@ -1,8 +1,10 @@
 mod bot;
 mod config;
+mod credentials;
 mod web;
 
 use config::Config;
+use credentials::CredentialStore;
 
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
@@ -19,7 +21,6 @@ async fn main() -> anyhow::Result<()> {
     let (bot, _) = bot::MatrixBot::new(
         &config.homeserver,
         &config.username,
-        &config.password,
         &config.room_id,
         config.message_history.limit,
         &config.store.path,
@@ -28,11 +29,16 @@ async fn main() -> anyhow::Result<()> {
     // Clone bot for web server
     let bot_for_web = bot.clone();
 
+    // Create credential store
+    let credentials_store = CredentialStore::new("credentials.db");
+
     // Start web server
     let auth_config = config.web.auth.clone();
     let state = web::AppState {
         bot: bot_for_web,
         auth: auth_config,
+        credentials_store,
+        username: config.username.clone(),
     };
     
     web::start_server(&config.web.host, config.web.port, state).await?;

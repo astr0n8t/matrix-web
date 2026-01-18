@@ -22,7 +22,6 @@ pub type MessageReceiver = broadcast::Receiver<String>;
 pub struct MatrixBot {
     homeserver: String,
     username: String,
-    matrix_password: String,
     room_id: String,
     store_path: String,
     history_limit: usize,
@@ -36,7 +35,6 @@ impl MatrixBot {
     pub fn new(
         homeserver: &str,
         username: &str,
-        password: &str,
         room_id: &str,
         history_limit: usize,
         store_path: &str,
@@ -49,7 +47,6 @@ impl MatrixBot {
         let bot = MatrixBot {
             homeserver: homeserver.to_string(),
             username: username.to_string(),
-            matrix_password: password.to_string(),
             room_id: room_id.to_string(),
             store_path: store_path.to_string(),
             history_limit,
@@ -66,7 +63,7 @@ impl MatrixBot {
         self.client.lock().await.is_some()
     }
     
-    pub async fn connect(&self, store_passphrase: &str) -> anyhow::Result<()> {
+    pub async fn connect(&self, matrix_password: &str, store_passphrase: &str) -> anyhow::Result<()> {
         // Check if already connected
         if self.is_connected().await {
             return Ok(());
@@ -98,7 +95,7 @@ impl MatrixBot {
         info!("Logging in as {}", self.username);
         client
             .matrix_auth()
-            .login_username(&self.username, &self.matrix_password)
+            .login_username(&self.username, matrix_password)
             .initial_device_display_name("Matrix Web Bot")
             .await?;
 

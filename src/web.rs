@@ -14,11 +14,14 @@ use tracing::{info, warn};
 
 use crate::bot::MatrixBot;
 use crate::config::{AuthConfig, hash_value};
+use crate::credentials::CredentialStore;
 
 #[derive(Clone)]
 pub struct AppState {
     pub bot: MatrixBot,
     pub auth: Option<AuthConfig>,
+    pub credentials_store: CredentialStore,
+    pub username: String,
 }
 
 #[derive(Deserialize)]
@@ -39,7 +42,8 @@ pub struct MessageHistoryResponse {
 
 #[derive(Deserialize)]
 pub struct LoginRequest {
-    pub passphrase: String,
+    pub matrix_password: Option<String>,
+    pub sqlite_password: String,
 }
 
 #[derive(Serialize)]
@@ -51,6 +55,7 @@ pub struct LoginResponse {
 #[derive(Serialize)]
 pub struct StatusResponse {
     pub connected: bool,
+    pub credentials_exist: bool,
 }
 
 pub fn create_router(state: AppState) -> Router {
@@ -109,7 +114,8 @@ async fn status_handler(
     State(state): State<Arc<AppState>>,
 ) -> impl IntoResponse {
     let connected = state.bot.is_connected().await;
-    Json(StatusResponse { connected })
+    let credentials_exist = state.credentials_store.credentials_exist().unwrap_or(false);
+    Json(StatusResponse { connected, credentials_exist })
 }
 
 async fn login_handler(
@@ -126,7 +132,62 @@ async fn login_handler(
         );
     }
 
-    match state.bot.connect(&payload.passphrase).await {
+    // Check if credentials exist in the database
+    let credentials_exist = state.credentials_store.credentials_exist().unwrap_or(false);
+    
+    let matrix_password = if credentials_exist {
+        // Retrieve stored credentials
+        match state.credentials_store.get_credentials(&payload.sqlite_password) {
+            Ok((stored_username, stored_password)) => {
+                // Verify username matches
+                if stored_username != state.username {
+                    return (
+                        StatusCode::UNAUTHORIZED,
+                        Json(LoginResponse {
+                            success: false,
+                            error: Some("Username mismatch with stored credentials".to_string()),
+                        }),
+                    );
+                }
+                stored_password
+            }
+            Err(e) => {
+                return (
+                    StatusCode::UNAUTHORIZED,
+                    Json(LoginResponse {
+                        success: false,
+                        error: Some(format!("Failed to retrieve credentials: {}. Wrong SQLite password?", e)),
+                    }),
+                );
+            }
+        }
+    } else {
+        // First time login - require matrix password
+        match payload.matrix_password {
+            Some(password) => {
+                // Store credentials for future use
+                if let Err(e) = state.credentials_store.store_credentials(
+                    &state.username,
+                    &password,
+                    &payload.sqlite_password,
+                ) {
+                    warn!("Failed to store credentials: {}", e);
+                }
+                password
+            }
+            None => {
+                return (
+                    StatusCode::BAD_REQUEST,
+                    Json(LoginResponse {
+                        success: false,
+                        error: Some("Matrix password required for first login".to_string()),
+                    }),
+                );
+            }
+        }
+    };
+
+    match state.bot.connect(&matrix_password, &payload.sqlite_password).await {
         Ok(_) => {
             info!("Bot connected successfully");
             (

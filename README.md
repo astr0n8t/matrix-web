@@ -38,7 +38,7 @@ cp config.example.yaml config.yaml
 ```yaml
 homeserver: "https://matrix.org"
 username: "your_bot_username"
-password: "your_bot_password"
+# password is no longer stored in config - you will be prompted on first launch
 room_id: "!room:matrix.org"
 web:
   host: "127.0.0.1"
@@ -93,7 +93,6 @@ All configuration values can be overridden using environment variables:
 
 - `MATRIX_HOMESERVER` - Matrix homeserver URL
 - `MATRIX_USERNAME` - Bot username
-- `MATRIX_PASSWORD` - Bot password (recommended for secrets)
 - `MATRIX_ROOM_ID` - Room ID to join
 - `MATRIX_STORE_PATH` - Path to SQLite encryption store
 - `MATRIX_STORE_PASSPHRASE` - Passphrase for encryption store
@@ -103,9 +102,10 @@ All configuration values can be overridden using environment variables:
 - `WEB_AUTH_HEADER_VALUE` - Authentication header value (will be hashed automatically)
 - `MESSAGE_HISTORY_LIMIT` - Number of messages to load
 
+**Note:** Matrix password is no longer stored in configuration or environment variables. You will be prompted to enter it via the web interface on first launch.
+
 Example using environment variables:
 ```bash
-export MATRIX_PASSWORD="secret-password"
 export WEB_AUTH_HEADER_VALUE="secret-token"  # Will be hashed automatically
 cargo run --release
 ```
@@ -122,10 +122,12 @@ cargo run --release
 http://127.0.0.1:8080
 ```
 
-3. **Enter the SQLite store passphrase** in the login modal:
-   - This is the passphrase configured in `store.passphrase` in your config.yaml
-   - Leave it empty if you didn't set a passphrase
-   - The bot will connect to Matrix using this passphrase
+3. **Enter your credentials** in the login modal:
+   - On first launch, you'll be prompted for both:
+     - **Matrix password**: Your Matrix account password (will be encrypted and stored)
+     - **SQLite database password**: A password to encrypt the credentials database
+   - On subsequent launches, you only need the SQLite database password
+   - The Matrix credentials are encrypted and stored in `credentials.db`
 
 4. Once connected:
    - Type messages in the input field and press Enter or click Send to post to the Matrix room
@@ -135,8 +137,11 @@ http://127.0.0.1:8080
 ## How It Works
 
 - The web server starts but the bot does NOT connect to Matrix on startup
-- When you access the web interface, a login modal prompts for the SQLite store passphrase
-- After you enter the passphrase, the bot connects to your Matrix homeserver with the configured credentials
+- When you access the web interface, a login modal prompts for credentials:
+  - **First launch**: Enter both Matrix password and SQLite database password
+  - **Subsequent launches**: Enter only the SQLite database password
+- The Matrix password is encrypted using the SQLite password and stored in `credentials.db`
+- After you enter your credentials, the bot connects to your Matrix homeserver
 - The bot initializes E2EE with a persistent SQLite store using the provided passphrase
 - Cross-signing is automatically set up (requires device verification via Element)
 - The bot joins the specified room and loads recent message history
@@ -144,6 +149,7 @@ http://127.0.0.1:8080
 - Messages sent through the web interface are posted to the Matrix room
 - When you disconnect, the bot logs out from Matrix and clears the session
 - Encryption keys and device state persist in the `matrix_store` directory across sessions
+- Matrix credentials persist in encrypted form in the `credentials.db` file
 - Optional header-based authentication protects the web interface when behind a reverse proxy
 
 ## Architecture
@@ -159,8 +165,10 @@ http://127.0.0.1:8080
 - **Persistent encryption state**: Keys are stored securely in an SQLite database (`matrix_store/`)
 - **Device verification**: Verify the bot device via Element to enable full E2EE features and key backups
 - **Store encryption**: Optionally protect the encryption store with a passphrase
-- Keep your `config.yaml` file secure as it contains credentials
+- **Credential encryption**: Matrix credentials are encrypted and stored locally in `credentials.db`
+- **No plaintext passwords**: Passwords are never stored in plaintext in configuration files
 - The configuration file is in `.gitignore` to prevent accidental commits
+- Keep your `credentials.db` and `matrix_store/` directories secure
 - See [SECURITY.md](SECURITY.md) for detailed security considerations
 
 ## License

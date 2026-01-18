@@ -6,6 +6,7 @@ use std::env;
 pub struct Config {
     pub homeserver: String,
     pub username: String,
+    #[serde(default)]
     pub password: String,
     pub room_id: String,
     pub web: WebConfig,

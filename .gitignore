@@ -18,6 +18,9 @@ Thumbs.db
 # Configuration (may contain secrets)
 config.yaml
 
+# Credentials database (contains encrypted passwords)
+credentials.db
+
 # Matrix store (contains encryption keys and state)
 matrix_store/
 
