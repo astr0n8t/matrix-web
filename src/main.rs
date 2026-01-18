@@ -30,7 +30,7 @@ async fn main() -> anyhow::Result<()> {
     let bot_for_web = bot.clone();
 
     // Create credential store
-    let credentials_store = CredentialStore::new("credentials.db");
+    let credentials_store = CredentialStore::new(&config.database.path);
 
     // Start web server
     let auth_config = config.web.auth.clone();

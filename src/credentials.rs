@@ -1,6 +1,7 @@
 use anyhow::{Context, Result};
 use rusqlite::Connection;
 use sha2::{Digest, Sha256};
+use std::path::Path;
 
 #[derive(Clone)]
 pub struct CredentialStore {
@@ -9,6 +10,15 @@ pub struct CredentialStore {
 
 impl CredentialStore {
     pub fn new(db_path: &str) -> Self {
+        // Ensure parent directory exists
+        if let Some(parent) = Path::new(db_path).parent() {
+            if !parent.exists() {
+                if let Err(e) = std::fs::create_dir_all(parent) {
+                    tracing::warn!("Failed to create database directory: {}", e);
+                }
+            }
+        }
+        
         Self {
             db_path: db_path.to_string(),
         }
