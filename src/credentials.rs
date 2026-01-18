@@ -122,12 +122,4 @@ impl CredentialStore {
 
         Ok((username, password))
     }
-
-    /// Clear all stored credentials
-    pub fn clear_credentials(&self) -> Result<()> {
-        let conn = Connection::open(&self.db_path)?;
-        self.init_db(&conn)?;
-        conn.execute("DELETE FROM credentials", [])?;
-        Ok(())
-    }
 }
