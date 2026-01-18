@@ -319,12 +319,6 @@ impl MatrixBot {
         Ok(())
     }
 
-    pub async fn start_sync(self) -> anyhow::Result<()> {
-        // This method is no longer used in the new architecture
-        // Sync is started automatically by connect()
-        Ok(())
-    }
-
     pub fn subscribe(&self) -> MessageReceiver {
         self.message_tx.subscribe()
     }
