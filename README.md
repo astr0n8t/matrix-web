@@ -122,20 +122,29 @@ cargo run --release
 http://127.0.0.1:8080
 ```
 
-3. Type messages in the input field and press Enter or click Send to post to the Matrix room.
+3. **Enter the SQLite store passphrase** in the login modal:
+   - This is the passphrase configured in `store.passphrase` in your config.yaml
+   - Leave it empty if you didn't set a passphrase
+   - The bot will connect to Matrix using this passphrase
+
+4. Once connected:
+   - Type messages in the input field and press Enter or click Send to post to the Matrix room
+   - Click the "Disconnect" button in the header to log out from the Matrix server
+   - The bot will also automatically disconnect when you close the browser tab
 
 ## How It Works
 
-- The bot logs in to your Matrix homeserver with the provided credentials
-- It initializes E2EE with a persistent SQLite store to maintain encryption keys
+- The web server starts but the bot does NOT connect to Matrix on startup
+- When you access the web interface, a login modal prompts for the SQLite store passphrase
+- After you enter the passphrase, the bot connects to your Matrix homeserver with the configured credentials
+- The bot initializes E2EE with a persistent SQLite store using the provided passphrase
 - Cross-signing is automatically set up (requires device verification via Element)
-- It joins the specified room and loads recent message history
-- The bot starts syncing new messages in real-time
-- The web interface loads message history and connects via SSE for real-time updates
+- The bot joins the specified room and loads recent message history
+- Real-time syncing begins and messages are displayed in the IRC-like interface
 - Messages sent through the web interface are posted to the Matrix room
-- All messages in the room are displayed in the IRC-like interface
+- When you disconnect, the bot logs out from Matrix and clears the session
+- Encryption keys and device state persist in the `matrix_store` directory across sessions
 - Optional header-based authentication protects the web interface when behind a reverse proxy
-- Encryption keys and device state persist across restarts in the `matrix_store` directory
 
 ## Architecture
 

@@ -146,6 +146,8 @@ cargo build --release
 ## Using the Web Interface
 
 1. **Start the bot** using one of the methods above
+   - The web server starts immediately
+   - The bot does NOT connect to Matrix yet - it waits for your passphrase
 
 2. **Open your browser** and navigate to:
    ```
@@ -153,15 +155,27 @@ cargo build --release
    ```
    (or the host:port you configured)
 
-3. **Send messages**:
+3. **Enter your SQLite store passphrase**:
+   - A login modal will appear when you first access the interface
+   - Enter the passphrase configured in `store.passphrase` in config.yaml
+   - Leave it empty if you didn't configure a passphrase
+   - Click "Connect" or press Enter
+   - The bot will now connect to Matrix using this passphrase
+
+4. **Send messages**:
    - Type your message in the input box at the bottom
    - Press Enter or click "Send"
    - Your message will be posted to the Matrix room
 
-4. **Receive messages**:
-   - Previous messages are loaded automatically on startup (configurable limit)
+5. **Receive messages**:
+   - Previous messages are loaded automatically after connection (configurable limit)
    - All new messages in the Matrix room will appear in real-time
    - Messages are displayed in IRC-like format: `@user:homeserver: message`
+
+6. **Disconnect**:
+   - Click the "Disconnect" button in the header to log out from Matrix
+   - The bot will disconnect, clear the session, and show the login modal again
+   - The bot also automatically disconnects when you close the browser tab
 
 ## Features
 
