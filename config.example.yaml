@@ -48,5 +48,10 @@ message_history:
 # SQLite store configuration for encryption state
 # Optional: defaults shown below
 store:
-  path: "./matrix_store"  # Directory path for SQLite database
+  path: "./matrix_store"  # Directory path for Matrix SDK SQLite database
   passphrase: ""          # Optional passphrase for encrypting the store (recommended for production)
+
+# Database configuration
+# Optional: defaults shown below
+database:
+  path: "./matrix.db"  # Path to the SQLite database file for credentials

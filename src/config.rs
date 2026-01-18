@@ -14,6 +14,8 @@ pub struct Config {
     pub message_history: MessageHistoryConfig,
     #[serde(default)]
     pub store: StoreConfig,
+    #[serde(default)]
+    pub database: DatabaseConfig,
 }
 
 #[derive(Debug, Deserialize, Serialize)]
@@ -45,6 +47,12 @@ pub struct StoreConfig {
     pub passphrase: String,
 }
 
+#[derive(Debug, Deserialize, Serialize)]
+pub struct DatabaseConfig {
+    #[serde(default = "default_database_path")]
+    pub path: String,
+}
+
 impl Default for MessageHistoryConfig {
     fn default() -> Self {
         Self {
@@ -61,6 +69,10 @@ fn default_store_path() -> String {
     "./matrix_store".to_string()
 }
 
+fn default_database_path() -> String {
+    "./matrix.db".to_string()
+}
+
 fn default_store_passphrase() -> String {
     String::new()
 }
@@ -70,6 +82,14 @@ impl Default for StoreConfig {
         Self {
             path: default_store_path(),
             passphrase: default_store_passphrase(),
+        }
+    }
+}
+
+impl Default for DatabaseConfig {
+    fn default() -> Self {
+        Self {
+            path: default_database_path(),
         }
     }
 }
@@ -132,6 +152,11 @@ impl Config {
         }
         if let Ok(val) = env::var("MATRIX_STORE_PASSPHRASE") {
             self.store.passphrase = val;
+        }
+        
+        // Database configuration
+        if let Ok(val) = env::var("DATABASE_PATH") {
+            self.database.path = val;
         }
     }
 }

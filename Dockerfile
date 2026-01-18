@@ -56,6 +56,9 @@ RUN if [ "$TARGETPLATFORM" = "linux/arm" ]; then \
   cp /app/target/arm-unknown-linux-gnueabi/release/matrix-web /app/matrix-web; \
   fi
 
+# Create directory for mounting in the final stage
+RUN mkdir -p /app/data
+
 # second stage.
 FROM gcr.io/distroless/cc-debian12 AS build-release-stage
 
@@ -63,6 +66,14 @@ ENV RUST_LOG=info
 
 COPY --from=builder /app/matrix-web /matrix-web
 
+# Create /data directory for database and matrix store
+# Copy empty directory with proper ownership
+COPY --from=builder --chown=nonroot:nonroot /app/data /data
+
+WORKDIR /data
+
 USER nonroot:nonroot
+
+VOLUME ["/data"]
 
 ENTRYPOINT ["/matrix-web"]
