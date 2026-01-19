@@ -233,7 +233,7 @@ async fn login_handler(
         }
     };
 
-    match state.bot.connect(&matrix_password, &payload.sqlite_password).await {
+    match state.bot.connect(&matrix_password, &payload.sqlite_password, &state.credentials_store).await {
         Ok(_) => {
             info!("Bot connected successfully");
             (
