@@ -150,7 +150,7 @@ jobs:
           IMAGES=""
           for digestfile in /tmp/digests/*; do
             digest=$(basename "$digestfile")
-            IMAGES="$IMAGES ghcr.io/${{ github.repository }}@$digest"
+            IMAGES="$IMAGES ghcr.io/${{ github.repository }}@sha256:$digest"
           done
 
           docker buildx imagetools create \
