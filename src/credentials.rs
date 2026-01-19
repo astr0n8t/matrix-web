@@ -134,10 +134,9 @@ impl CredentialStore {
             "SELECT device_id, access_token_encrypted FROM credentials WHERE id = 1"
         )?;
         
-        let result: std::result::Result<(Option<String>, Option<Vec<u8>>), rusqlite::Error> = 
-            stmt.query_row([], |row| {
-                Ok((row.get(0)?, row.get(1)?))
-            });
+        let result: rusqlite::Result<(Option<String>, Option<Vec<u8>>)> = stmt.query_row([], |row| {
+            Ok((row.get(0)?, row.get(1)?))
+        });
 
         match result {
             Ok((Some(device_id), Some(access_token))) => {
@@ -184,10 +183,9 @@ impl CredentialStore {
             "SELECT device_id, access_token_encrypted FROM credentials WHERE id = 1"
         )?;
         
-        let (device_id, encrypted_token): (Option<String>, Option<Vec<u8>>) = 
-            stmt.query_row([], |row| {
-                Ok((row.get(0)?, row.get(1)?))
-            })?;
+        let (device_id, encrypted_token): (Option<String>, Option<Vec<u8>>) = stmt.query_row([], |row| {
+            Ok((row.get(0)?, row.get(1)?))
+        })?;
 
         let device_id = device_id.ok_or_else(|| anyhow::anyhow!("Session device_id is NULL"))?;
         let encrypted_token = encrypted_token.ok_or_else(|| anyhow::anyhow!("Session access_token is NULL"))?;

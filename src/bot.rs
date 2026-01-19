@@ -20,7 +20,6 @@ use tokio::sync::{broadcast, RwLock, Mutex};
 use tracing::{error, info, warn};
 use serde::{Deserialize, Serialize};
 use anyhow::Context;
-
 use crate::credentials::CredentialStore;
 
 pub type MessageSender = broadcast::Sender<String>;
