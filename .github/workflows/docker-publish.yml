@@ -30,6 +30,9 @@ jobs:
       # This is used to complete the identity challenge
       # with sigstore/fulcio when running outside of PRs.
       id-token: write
+    strategy:
+      matrix:
+        platform: [amd64, arm64, arm]
 
     steps:
       - name: Checkout repository
@@ -81,9 +84,9 @@ jobs:
             ghcr.io/astr0n8t/matrix-web:latest
             ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
-          cache-from: type=registry,ref=ghcr.io/astr0n8t/matrix-web:buildcache
-          cache-to: type=registry,ref=ghcr.io/astr0n8t/matrix-web:buildcache,mode=max
-          platforms: linux/arm, linux/arm64, linux/amd64
+          cache-from: type=registry,ref=ghcr.io/astr0n8t/matrix-web:buildcache-${{ matrix.platform }}
+          cache-to: type=registry,ref=ghcr.io/astr0n8t/matrix-web:buildcache-${{ matrix.platform }},mode=max
+          platforms: linux/${{ matrix.platform }}
           build-args: |
             BUILDPLATFORM=linux/amd64
 
