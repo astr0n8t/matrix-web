@@ -421,6 +421,41 @@ impl MatrixBot {
             if let Some(request) = client.encryption().get_verification_request(user_id, request_id).await {
                 info!("Accepting verification request: {}", request_id);
                 request.accept().await?;
+                
+                // After accepting the request, wait for it to transition to SAS verification
+                // and accept the SAS verification to start the emoji/decimal generation
+                info!("Waiting for verification request to transition to SAS...");
+                for sas_attempt in 0..10 {
+                    tokio::time::sleep(tokio::time::Duration::from_millis(500)).await;
+                    
+                    if let Some(verification) = client.encryption().get_verification(user_id, request_id).await {
+                        if let Verification::SasV1(sas) = verification {
+                            info!("Verification transitioned to SAS, accepting it");
+                            match sas.accept().await {
+                                Ok(_) => {
+                                    info!("Successfully accepted SAS verification, emojis should be available soon");
+                                    return Ok(());
+                                }
+                                Err(e) => {
+                                    let err_str = e.to_string();
+                                    if err_str.contains("already") || err_str.contains("accepted") {
+                                        info!("SAS verification was already accepted");
+                                        return Ok(());
+                                    } else {
+                                        warn!("Failed to accept SAS verification: {}", e);
+                                        // Continue retrying
+                                    }
+                                }
+                            }
+                        }
+                    }
+                    
+                    if sas_attempt < 9 {
+                        info!("SAS not ready yet, waiting... (attempt {}/10)", sas_attempt + 1);
+                    }
+                }
+                
+                warn!("Verification request accepted but SAS did not become available in time");
                 return Ok(());
             }
             
