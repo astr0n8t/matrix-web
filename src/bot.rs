@@ -450,23 +450,31 @@ impl MatrixBot {
                         if let Some(verification) = client.encryption().get_verification(user_id, &req_info.request_id).await {
                             if let Verification::SasV1(sas) = verification {
                                 if sas.can_be_presented() {
-                                    // Get emoji or decimals
-                                    let emoji = sas.emoji().map(|emojis| {
-                                        emojis.iter()
-                                            .map(|e| (e.symbol.to_string(), e.description.to_string()))
-                                            .collect()
-                                    });
-                                    
-                                    let decimals = sas.decimals().map(|(a, b, c)| (a, b, c));
-                                    
-                                    let sas_info = SasInfo {
-                                        request_id: req_info.request_id.clone(),
-                                        emoji,
-                                        decimals,
+                                    // Only update if we don't have active SAS or it's for the same request
+                                    let should_update = {
+                                        let active = bot.active_sas.read().await;
+                                        active.is_none() || active.as_ref().map(|a| &a.request_id) == Some(&req_info.request_id)
                                     };
                                     
-                                    *bot.active_sas.write().await = Some(sas_info);
-                                    info!("SAS verification ready for presentation");
+                                    if should_update {
+                                        // Get emoji or decimals
+                                        let emoji = sas.emoji().map(|emojis| {
+                                            emojis.iter()
+                                                .map(|e| (e.symbol.to_string(), e.description.to_string()))
+                                                .collect()
+                                        });
+                                        
+                                        let decimals = sas.decimals().map(|(a, b, c)| (a, b, c));
+                                        
+                                        let sas_info = SasInfo {
+                                            request_id: req_info.request_id.clone(),
+                                            emoji,
+                                            decimals,
+                                        };
+                                        
+                                        *bot.active_sas.write().await = Some(sas_info);
+                                        info!("SAS verification ready for presentation");
+                                    }
                                 }
                                 
                                 if sas.is_done() {
