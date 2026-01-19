@@ -119,7 +119,13 @@ impl MatrixBot {
             .await?;
 
         // Check if we have an existing session to restore
-        let session_exists = credentials_store.session_exists().unwrap_or(false);
+        let session_exists = match credentials_store.session_exists() {
+            Ok(exists) => exists,
+            Err(e) => {
+                warn!("Failed to check if session exists: {}. Assuming no session.", e);
+                false
+            }
+        };
         
         if session_exists {
             info!("Found existing session, attempting to restore...");

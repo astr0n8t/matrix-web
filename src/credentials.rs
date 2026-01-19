@@ -158,11 +158,16 @@ impl CredentialStore {
 
         let encrypted_token = self.encrypt_password(access_token, sqlite_password);
 
-        conn.execute(
+        // Update the session fields for the existing credentials row
+        let rows_affected = conn.execute(
             "UPDATE credentials SET device_id = ?1, access_token_encrypted = ?2 WHERE id = 1",
             (device_id, encrypted_token),
         )
         .context("Failed to store session")?;
+
+        if rows_affected == 0 {
+            anyhow::bail!("No credentials row found to update session. Please login first.");
+        }
 
         Ok(())
     }
