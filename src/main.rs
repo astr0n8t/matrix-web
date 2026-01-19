@@ -12,13 +12,11 @@ async fn main() -> anyhow::Result<()> {
     tracing_subscriber::fmt::init();
 
     // Load configuration
-    let (config, config_path) = Config::load_from_default_locations().unwrap_or_else(|e| {
+    let (config, _config_path) = Config::load_from_default_locations().unwrap_or_else(|e| {
         eprintln!("Failed to load config file: {}", e);
         eprintln!("Please create a config file from config.example.yaml");
         std::process::exit(1);
     });
-    
-    tracing::info!("Using configuration from: {}", config_path);
 
     // Create Matrix bot (not connected yet)
     let (bot, _) = bot::MatrixBot::new(
