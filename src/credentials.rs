@@ -134,15 +134,18 @@ impl CredentialStore {
             "SELECT device_id, access_token_encrypted FROM credentials WHERE id = 1"
         )?;
         
-        let result: Result<(Option<String>, Option<Vec<u8>>), _> = stmt.query_row([], |row| {
-            Ok((row.get(0)?, row.get(1)?))
-        });
+        let result: std::result::Result<(Option<String>, Option<Vec<u8>>), rusqlite::Error> = 
+            stmt.query_row([], |row| {
+                Ok((row.get(0)?, row.get(1)?))
+            });
 
         match result {
             Ok((Some(device_id), Some(access_token))) => {
                 Ok(!device_id.is_empty() && !access_token.is_empty())
             }
-            _ => Ok(false),
+            Ok(_) => Ok(false),  // NULL values found
+            Err(rusqlite::Error::QueryReturnedNoRows) => Ok(false),  // No credentials row exists
+            Err(e) => Err(e.into()),  // Propagate other errors
         }
     }
 
@@ -181,9 +184,13 @@ impl CredentialStore {
             "SELECT device_id, access_token_encrypted FROM credentials WHERE id = 1"
         )?;
         
-        let (device_id, encrypted_token): (String, Vec<u8>) = stmt.query_row([], |row| {
-            Ok((row.get(0)?, row.get(1)?))
-        })?;
+        let (device_id, encrypted_token): (Option<String>, Option<Vec<u8>>) = 
+            stmt.query_row([], |row| {
+                Ok((row.get(0)?, row.get(1)?))
+            })?;
+
+        let device_id = device_id.ok_or_else(|| anyhow::anyhow!("Session device_id is NULL"))?;
+        let encrypted_token = encrypted_token.ok_or_else(|| anyhow::anyhow!("Session access_token is NULL"))?;
 
         let access_token = self.decrypt_password(&encrypted_token, sqlite_password)?;
 

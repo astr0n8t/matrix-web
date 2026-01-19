@@ -19,6 +19,7 @@ use std::sync::Arc;
 use tokio::sync::{broadcast, RwLock, Mutex};
 use tracing::{error, info, warn};
 use serde::{Deserialize, Serialize};
+use anyhow::Context;
 
 use crate::credentials::CredentialStore;
 
@@ -133,9 +134,12 @@ impl MatrixBot {
                 Ok((device_id, access_token)) => {
                     info!("Restoring session with device_id: {}", device_id);
                     
+                    let user_id = self.username.as_str().try_into()
+                        .with_context(|| format!("Invalid user ID format: {}", self.username))?;
+                    
                     let session = MatrixSession {
                         meta: SessionMeta {
-                            user_id: self.username.as_str().try_into()?,
+                            user_id,
                             device_id: device_id.as_str().into(),
                         },
                         tokens: MatrixSessionTokens {
