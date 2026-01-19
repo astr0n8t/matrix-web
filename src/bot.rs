@@ -409,32 +409,41 @@ impl MatrixBot {
         
         let user_id = <&UserId>::try_from(other_user_id)?;
         
-        // Get the verification request
-        if let Some(request) = client.encryption().get_verification_request(user_id, request_id).await {
-            info!("Accepting verification request: {}", request_id);
-            request.accept().await?;
-            return Ok(());
-        }
-        
-        // The verification request might have already transitioned to a verification flow
-        // Check if we can find it as a verification instead
-        if let Some(verification) = client.encryption().get_verification(user_id, request_id).await {
-            info!("Verification request already transitioned to verification flow");
-            if let Verification::SasV1(sas) = verification {
-                // If it's already in SAS mode and can be presented, accept it
-                if sas.can_be_presented() {
-                    info!("SAS verification is ready for presentation");
+        // Try to get the verification request with retries (in case SDK is still processing)
+        for attempt in 0..5 {
+            if attempt > 0 {
+                info!("Retry attempt {} to get verification request", attempt);
+                tokio::time::sleep(tokio::time::Duration::from_millis(200)).await;
+            }
+            
+            // Get the verification request
+            if let Some(request) = client.encryption().get_verification_request(user_id, request_id).await {
+                info!("Accepting verification request: {}", request_id);
+                request.accept().await?;
+                return Ok(());
+            }
+            
+            // The verification request might have already transitioned to a verification flow
+            // Check if we can find it as a verification instead
+            if let Some(verification) = client.encryption().get_verification(user_id, request_id).await {
+                info!("Verification request already transitioned to verification flow");
+                if let Verification::SasV1(sas) = verification {
+                    // If it's already in SAS mode and can be presented, accept it
+                    if sas.can_be_presented() {
+                        info!("SAS verification is ready for presentation");
+                        return Ok(());
+                    }
+                    // If it can be accepted, accept it
+                    if let Err(e) = sas.accept().await {
+                        info!("Could not accept SAS (might already be accepted): {}", e);
+                    }
                     return Ok(());
                 }
-                // Otherwise, try to accept it if it needs acceptance
-                if !sas.is_done() && !sas.is_cancelled() {
-                    info!("SAS verification found but in unexpected state");
-                }
+                return Ok(());
             }
-            return Ok(());
         }
         
-        Err(anyhow::anyhow!("Verification request not found"))
+        Err(anyhow::anyhow!("Verification request not found after retries"))
     }
 
     pub async fn confirm_verification(&self, request_id: &str, other_user_id: &str) -> anyhow::Result<()> {
