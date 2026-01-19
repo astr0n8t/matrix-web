@@ -416,6 +416,24 @@ impl MatrixBot {
             return Ok(());
         }
         
+        // The verification request might have already transitioned to a verification flow
+        // Check if we can find it as a verification instead
+        if let Some(verification) = client.encryption().get_verification(user_id, request_id).await {
+            info!("Verification request already transitioned to verification flow");
+            if let Verification::SasV1(sas) = verification {
+                // If it's already in SAS mode and can be presented, accept it
+                if sas.can_be_presented() {
+                    info!("SAS verification is ready for presentation");
+                    return Ok(());
+                }
+                // Otherwise, try to accept it if it needs acceptance
+                if !sas.is_done() && !sas.is_cancelled() {
+                    info!("SAS verification found but in unexpected state");
+                }
+            }
+            return Ok(());
+        }
+        
         Err(anyhow::anyhow!("Verification request not found"))
     }
 
