@@ -233,7 +233,16 @@ impl MatrixBot {
         // Note: We do NOT call logout() on the server or clear the stored session.
         // This allows the user to reconnect with the same device_id and session,
         // which is necessary to avoid crypto store device_id mismatch errors.
-        // The session and crypto store will remain valid for future reconnections.
+        // 
+        // Implications:
+        // - The session remains active on the Matrix server until it expires or is revoked
+        // - The device will still appear in the user's device list
+        // - On reconnect, the same session and device_id will be used
+        // - The crypto store and session will remain synchronized
+        // 
+        // This is the correct behavior for a "disconnect/reconnect" flow. If complete
+        // logout and session cleanup is needed in the future, a separate method should
+        // be created that calls logout() and clears both the session and crypto store.
         
         // Remove the client reference but keep the session stored for reconnect
         *self.client.lock().await = None;
