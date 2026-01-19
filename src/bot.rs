@@ -274,25 +274,6 @@ impl MatrixBot {
         *self.sync_handle.lock().await = Some(handle);
     }
 
-    pub async fn join_room(&self) -> anyhow::Result<()> {
-        let client_guard = self.client.lock().await;
-        let client = client_guard.as_ref().ok_or_else(|| anyhow::anyhow!("Not connected"))?;
-        
-        let room_id = <&matrix_sdk::ruma::RoomId>::try_from(self.room_id.as_str())?;
-        
-        // Try to join the room
-        client.join_room_by_id(room_id).await?;
-        info!("Joined room: {}", self.room_id);
-        
-        Ok(())
-    }
-
-    pub async fn load_message_history(&self, limit: usize) -> anyhow::Result<()> {
-        let client_guard = self.client.lock().await;
-        let client = client_guard.as_ref().ok_or_else(|| anyhow::anyhow!("Not connected"))?;
-        self.load_message_history_with_client(client, limit).await
-    }
-
     pub async fn get_message_history(&self) -> Vec<String> {
         let history = self.message_history.read().await;
         history.clone()
