@@ -492,6 +492,7 @@ impl MatrixBot {
         
         let user_id = <&UserId>::try_from(other_user_id)?;
         
+        // Try to cancel the verification request
         if let Some(request) = client.encryption().get_verification_request(user_id, request_id).await {
             info!("Cancelling verification request: {}", request_id);
             request.cancel().await?;
@@ -510,7 +511,34 @@ impl MatrixBot {
             return Ok(());
         }
         
-        Err(anyhow::anyhow!("Verification request not found"))
+        // The request might have already transitioned to a verification
+        if let Some(verification) = client.encryption().get_verification(user_id, request_id).await {
+            info!("Verification has transitioned, cancelling the verification instead");
+            if let Verification::SasV1(sas) = verification {
+                sas.cancel().await?;
+            }
+            
+            // Remove from our tracking
+            self.verification_requests.write().await.retain(|r| r.request_id != request_id);
+            
+            // Clear active SAS if it matches
+            let mut active_sas = self.active_sas.write().await;
+            if let Some(ref sas) = *active_sas {
+                if sas.request_id == request_id {
+                    *active_sas = None;
+                }
+            }
+            
+            return Ok(());
+        }
+        
+        // If we can't find it, it might have already been cancelled or completed
+        // Remove from our tracking anyway
+        self.verification_requests.write().await.retain(|r| r.request_id != request_id);
+        *self.active_sas.write().await = None;
+        
+        info!("Verification request not found, assuming already cancelled or completed");
+        Ok(())
     }
 
     async fn setup_verification_handlers(&self, client: Client) {
