@@ -4,7 +4,6 @@ name: Docker
 # They are provided by a third-party and are governed by
 # separate terms of service, privacy policy, and support
 # documentation.
-
 on:
   schedule:
     - cron: "41 11 * * 0"
@@ -149,7 +148,7 @@ jobs:
       - name: Create & push multi-arch manifest
         run: |
           IMAGES=""
-          for digestfile in /tmp/digests/*/*; do
+          for digestfile in /tmp/digests/*; do
             digest=$(basename "$digestfile")
             IMAGES="$IMAGES ghcr.io/${{ github.repository }}@$digest"
           done
