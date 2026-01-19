@@ -22,6 +22,10 @@ use serde::{Deserialize, Serialize};
 use anyhow::Context;
 use crate::credentials::CredentialStore;
 
+// Constants for SAS verification retry logic
+const MAX_SAS_TRANSITION_ATTEMPTS: u32 = 10;
+const SAS_TRANSITION_RETRY_DELAY_MS: u64 = 500;
+
 pub type MessageSender = broadcast::Sender<String>;
 pub type MessageReceiver = broadcast::Receiver<String>;
 
@@ -421,6 +425,45 @@ impl MatrixBot {
             if let Some(request) = client.encryption().get_verification_request(user_id, request_id).await {
                 info!("Accepting verification request: {}", request_id);
                 request.accept().await?;
+                
+                // After accepting the request, wait for it to transition to SAS verification
+                // and accept the SAS verification to start the emoji/decimal generation
+                info!("Waiting for verification request to transition to SAS...");
+                for sas_attempt in 0..MAX_SAS_TRANSITION_ATTEMPTS {
+                    // Check immediately on first attempt, then wait before subsequent attempts
+                    if sas_attempt > 0 {
+                        tokio::time::sleep(tokio::time::Duration::from_millis(SAS_TRANSITION_RETRY_DELAY_MS)).await;
+                    }
+                    
+                    info!("Checking for SAS verification (attempt {}/{})", sas_attempt + 1, MAX_SAS_TRANSITION_ATTEMPTS);
+                    
+                    if let Some(verification) = client.encryption().get_verification(user_id, request_id).await {
+                        if let Verification::SasV1(sas) = verification {
+                            info!("Verification transitioned to SAS, accepting it");
+                            match sas.accept().await {
+                                Ok(_) => {
+                                    info!("Successfully accepted SAS verification, emojis should be available soon");
+                                    return Ok(());
+                                }
+                                Err(e) => {
+                                    // Note: Error message matching is fragile but necessary since matrix-sdk
+                                    // doesn't provide specific error types for this case. This is a known
+                                    // limitation and acceptable given the alternatives.
+                                    let err_str = e.to_string();
+                                    if err_str.contains("already") || err_str.contains("accepted") {
+                                        info!("SAS verification was already accepted");
+                                        return Ok(());
+                                    } else {
+                                        warn!("Failed to accept SAS verification: {}", e);
+                                        // Continue retrying in case it's a transient error
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+                
+                warn!("Verification request accepted but SAS did not become available in time");
                 return Ok(());
             }
             
