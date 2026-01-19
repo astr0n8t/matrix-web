@@ -222,7 +222,22 @@ impl MatrixBot {
         Ok(())
     }
     
-    pub async fn disconnect(&self, credentials_store: &CredentialStore) -> anyhow::Result<()> {
+    /// Disconnect from Matrix without clearing the session.
+    /// 
+    /// This stops syncing and clears the local client reference, but preserves
+    /// the session (device_id and access_token) for future reconnections. This
+    /// ensures that the crypto store's device_id matches on reconnect, preventing
+    /// "account in the store doesn't match" errors.
+    /// 
+    /// The session remains active on the Matrix server and the device will still
+    /// appear in the user's device list. On reconnect, the same session and
+    /// device_id will be restored.
+    /// 
+    /// # Note
+    /// This is appropriate for a "disconnect/reconnect" flow. For complete logout
+    /// with session cleanup, a separate method would need to be created that calls
+    /// logout() on the server and clears both the session and crypto store.
+    pub async fn disconnect(&self, _credentials_store: &CredentialStore) -> anyhow::Result<()> {
         info!("Disconnecting from Matrix...");
         
         // Stop sync task
@@ -230,24 +245,27 @@ impl MatrixBot {
             handle.abort();
         }
         
-        // Logout
-        if let Some(client) = self.client.lock().await.take() {
-            if let Err(e) = client.matrix_auth().logout().await {
-                warn!("Error during logout: {}", e);
-            }
-        }
+        // Note: We do NOT call logout() on the server or clear the stored session.
+        // This allows the user to reconnect with the same device_id and session,
+        // which is necessary to avoid crypto store device_id mismatch errors.
+        // 
+        // Implications:
+        // - The session remains active on the Matrix server until it expires or is revoked
+        // - The device will still appear in the user's device list
+        // - On reconnect, the same session and device_id will be used
+        // - The crypto store and session will remain synchronized
+        // 
+        // This is the correct behavior for a "disconnect/reconnect" flow. If complete
+        // logout and session cleanup is needed in the future, a separate method should
+        // be created that calls logout() and clears both the session and crypto store.
         
-        // Clear the stored session to prevent attempting to restore an invalid session on reconnect
-        if let Err(e) = credentials_store.clear_session() {
-            warn!("Failed to clear stored session: {}", e);
-        } else {
-            info!("Cleared stored session");
-        }
+        // Remove the client reference but keep the session stored for reconnect
+        *self.client.lock().await = None;
         
         // Clear message history
         self.message_history.write().await.clear();
         
-        info!("Bot disconnected");
+        info!("Bot disconnected (session preserved for reconnect)");
         Ok(())
     }
     
