@@ -19,6 +19,19 @@ This guide will help you set up and run your Matrix Web Bot.
 
 ## Configuration
 
+### Configuration File Locations
+
+The application searches for configuration files in the following locations (in order):
+
+1. `/config.yaml` - Docker/container location
+2. `./config.yaml` - Current working directory  
+3. `~/.config/matrix-web/config.yaml` - User configuration directory
+4. `/etc/matrix-web/config.yaml` - System-wide configuration
+
+The first configuration file found will be used. You can place your config in any of these locations based on your deployment scenario.
+
+### Creating Your Configuration
+
 1. **Copy the example configuration**:
    ```bash
    cp config.example.yaml config.yaml
