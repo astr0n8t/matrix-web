@@ -130,11 +130,11 @@ impl MatrixBot {
         if session_exists {
             info!("Found existing session, attempting to restore...");
             match credentials_store.get_session(store_passphrase) {
-                Ok((device_id, access_token)) => {
+                Ok((device_id, access_token, user_id)) => {
                     info!("Restoring session with device_id: {}", device_id);
                     
-                    let user_id = self.username.as_str().try_into()
-                        .with_context(|| format!("Invalid user ID format: {}", self.username))?;
+                    let user_id = user_id.as_str().try_into()
+                        .with_context(|| format!("Invalid user ID format: {}", user_id))?;
                     
                     let session = MatrixSession {
                         meta: SessionMeta {
@@ -208,6 +208,7 @@ impl MatrixBot {
             if let Err(e) = credentials_store.store_session(
                 session.meta().device_id.as_str(),
                 session.access_token(),
+                session.meta().user_id.as_str(),
                 store_passphrase,
             ) {
                 warn!("Failed to store session: {}", e);

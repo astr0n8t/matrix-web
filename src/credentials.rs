@@ -32,7 +32,8 @@ impl CredentialStore {
                 username TEXT NOT NULL,
                 password_encrypted BLOB NOT NULL,
                 device_id TEXT,
-                access_token_encrypted BLOB
+                access_token_encrypted BLOB,
+                user_id TEXT
             )",
             [],
         )
@@ -125,22 +126,22 @@ impl CredentialStore {
         Ok((username, password))
     }
 
-    /// Check if a session exists (has device_id and access_token)
+    /// Check if a session exists (has device_id, access_token, and user_id)
     pub fn session_exists(&self) -> Result<bool> {
         let conn = Connection::open(&self.db_path)?;
         self.init_db(&conn)?;
 
         let mut stmt = conn.prepare(
-            "SELECT device_id, access_token_encrypted FROM credentials WHERE id = 1"
+            "SELECT device_id, access_token_encrypted, user_id FROM credentials WHERE id = 1"
         )?;
         
-        let result: rusqlite::Result<(Option<String>, Option<Vec<u8>>)> = stmt.query_row([], |row| {
-            Ok((row.get(0)?, row.get(1)?))
+        let result: rusqlite::Result<(Option<String>, Option<Vec<u8>>, Option<String>)> = stmt.query_row([], |row| {
+            Ok((row.get(0)?, row.get(1)?, row.get(2)?))
         });
 
         match result {
-            Ok((Some(device_id), Some(access_token))) => {
-                Ok(!device_id.is_empty() && !access_token.is_empty())
+            Ok((Some(device_id), Some(access_token), Some(user_id))) => {
+                Ok(!device_id.is_empty() && !access_token.is_empty() && !user_id.is_empty())
             }
             Ok(_) => Ok(false),  // NULL values found
             Err(rusqlite::Error::QueryReturnedNoRows) => Ok(false),  // No credentials row exists
@@ -148,11 +149,12 @@ impl CredentialStore {
         }
     }
 
-    /// Store session data (device_id and access_token)
+    /// Store session data (device_id, access_token, and user_id)
     pub fn store_session(
         &self,
         device_id: &str,
         access_token: &str,
+        user_id: &str,
         sqlite_password: &str,
     ) -> Result<()> {
         let conn = Connection::open(&self.db_path)?;
@@ -162,8 +164,8 @@ impl CredentialStore {
 
         // Update the session fields for the existing credentials row
         let rows_affected = conn.execute(
-            "UPDATE credentials SET device_id = ?1, access_token_encrypted = ?2 WHERE id = 1",
-            (device_id, encrypted_token),
+            "UPDATE credentials SET device_id = ?1, access_token_encrypted = ?2, user_id = ?3 WHERE id = 1",
+            (device_id, encrypted_token, user_id),
         )
         .context("Failed to store session")?;
 
@@ -174,24 +176,25 @@ impl CredentialStore {
         Ok(())
     }
 
-    /// Retrieve session data (device_id and access_token)
-    pub fn get_session(&self, sqlite_password: &str) -> Result<(String, String)> {
+    /// Retrieve session data (device_id, access_token, and user_id)
+    pub fn get_session(&self, sqlite_password: &str) -> Result<(String, String, String)> {
         let conn = Connection::open(&self.db_path)?;
         self.init_db(&conn)?;
 
         let mut stmt = conn.prepare(
-            "SELECT device_id, access_token_encrypted FROM credentials WHERE id = 1"
+            "SELECT device_id, access_token_encrypted, user_id FROM credentials WHERE id = 1"
         )?;
         
-        let (device_id, encrypted_token): (Option<String>, Option<Vec<u8>>) = stmt.query_row([], |row| {
-            Ok((row.get(0)?, row.get(1)?))
+        let (device_id, encrypted_token, user_id): (Option<String>, Option<Vec<u8>>, Option<String>) = stmt.query_row([], |row| {
+            Ok((row.get(0)?, row.get(1)?, row.get(2)?))
         })?;
 
         let device_id = device_id.ok_or_else(|| anyhow::anyhow!("Session device_id is NULL"))?;
         let encrypted_token = encrypted_token.ok_or_else(|| anyhow::anyhow!("Session access_token is NULL"))?;
+        let user_id = user_id.ok_or_else(|| anyhow::anyhow!("Session user_id is NULL"))?;
 
         let access_token = self.decrypt_password(&encrypted_token, sqlite_password)?;
 
-        Ok((device_id, access_token))
+        Ok((device_id, access_token, user_id))
     }
 }
