@@ -491,20 +491,18 @@ impl MatrixBot {
             }
             
             // Get the verification
-            if let Some(verification) = client.encryption().get_verification(user_id, request_id).await {
-                if let Verification::SasV1(sas) = verification {
-                    info!("Confirming SAS verification");
-                    sas.confirm().await?;
-                    
-                    // Wait a moment for verification to complete
-                    tokio::time::sleep(tokio::time::Duration::from_millis(500)).await;
-                    
-                    if sas.is_done() {
-                        info!("Verification completed successfully!");
-                        *self.active_sas.write().await = None;
-                    }
-                    return Ok(());
+            if let Some(Verification::SasV1(sas)) = client.encryption().get_verification(user_id, request_id).await {
+                info!("Confirming SAS verification");
+                sas.confirm().await?;
+                
+                // Wait a moment for verification to complete
+                tokio::time::sleep(tokio::time::Duration::from_millis(500)).await;
+                
+                if sas.is_done() {
+                    info!("Verification completed successfully!");
+                    *self.active_sas.write().await = None;
                 }
+                return Ok(());
             }
         }
         
@@ -608,42 +606,40 @@ impl MatrixBot {
                 
                 for req_info in requests {
                     if let Ok(user_id) = <&UserId>::try_from(req_info.other_user_id.as_str()) {
-                        if let Some(verification) = client.encryption().get_verification(user_id, &req_info.request_id).await {
-                            if let Verification::SasV1(sas) = verification {
-                                if sas.can_be_presented() {
-                                    // Only update if we don't have active SAS or it's for the same request
-                                    let should_update = {
-                                        let active = bot.active_sas.read().await;
-                                        active.is_none() || active.as_ref().map(|a| &a.request_id) == Some(&req_info.request_id)
+                        if let Some(Verification::SasV1(sas)) = client.encryption().get_verification(user_id, &req_info.request_id).await {
+                            if sas.can_be_presented() {
+                                // Only update if we don't have active SAS or it's for the same request
+                                let should_update = {
+                                    let active = bot.active_sas.read().await;
+                                    active.is_none() || active.as_ref().map(|a| &a.request_id) == Some(&req_info.request_id)
+                                };
+                                
+                                if should_update {
+                                    // Get emoji or decimals
+                                    let emoji = sas.emoji().map(|emojis| {
+                                        emojis.iter()
+                                            .map(|e| (e.symbol.to_string(), e.description.to_string()))
+                                            .collect()
+                                    });
+                                    
+                                    let decimals = sas.decimals();
+                                    
+                                    let sas_info = SasInfo {
+                                        request_id: req_info.request_id.clone(),
+                                        emoji,
+                                        decimals,
                                     };
                                     
-                                    if should_update {
-                                        // Get emoji or decimals
-                                        let emoji = sas.emoji().map(|emojis| {
-                                            emojis.iter()
-                                                .map(|e| (e.symbol.to_string(), e.description.to_string()))
-                                                .collect()
-                                        });
-                                        
-                                        let decimals = sas.decimals().map(|(a, b, c)| (a, b, c));
-                                        
-                                        let sas_info = SasInfo {
-                                            request_id: req_info.request_id.clone(),
-                                            emoji,
-                                            decimals,
-                                        };
-                                        
-                                        *bot.active_sas.write().await = Some(sas_info);
-                                        info!("SAS verification ready for presentation");
-                                    }
+                                    *bot.active_sas.write().await = Some(sas_info);
+                                    info!("SAS verification ready for presentation");
                                 }
-                                
-                                if sas.is_done() {
-                                    info!("SAS verification completed");
-                                    *bot.active_sas.write().await = None;
-                                    // Remove from verification requests
-                                    bot.verification_requests.write().await.retain(|r| r.request_id != req_info.request_id);
-                                }
+                            }
+                            
+                            if sas.is_done() {
+                                info!("SAS verification completed");
+                                *bot.active_sas.write().await = None;
+                                // Remove from verification requests
+                                bot.verification_requests.write().await.retain(|r| r.request_id != req_info.request_id);
                             }
                         }
                     }
