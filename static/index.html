@@ -253,6 +253,147 @@
             margin-top: 10px;
             text-align: center;
         }
+
+        /* Verification Modal */
+        #verification-modal {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background-color: rgba(0, 0, 0, 0.95);
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            z-index: 1001;
+        }
+
+        #verification-modal.hidden {
+            display: none;
+        }
+
+        .verification-box {
+            background-color: #0a0a0a;
+            border: 2px solid #00ff00;
+            box-shadow: 0 0 20px #00ff00;
+            padding: 40px;
+            max-width: 500px;
+            width: 90%;
+            max-height: 80vh;
+            overflow-y: auto;
+        }
+
+        .verification-box h2 {
+            color: #00ff00;
+            text-shadow: 0 0 10px #00ff00;
+            margin-bottom: 20px;
+            text-align: center;
+        }
+
+        .verification-box p {
+            color: #00cc00;
+            margin-bottom: 15px;
+            line-height: 1.5;
+        }
+
+        .verification-request {
+            background-color: #001100;
+            border: 1px solid #00ff00;
+            padding: 15px;
+            margin-bottom: 15px;
+        }
+
+        .verification-request .device-info {
+            color: #00cc00;
+            margin-bottom: 10px;
+            font-size: 14px;
+        }
+
+        .emoji-grid {
+            display: grid;
+            grid-template-columns: repeat(4, 1fr);
+            gap: 15px;
+            margin: 20px 0;
+        }
+
+        .emoji-item {
+            text-align: center;
+            padding: 10px;
+            background-color: #001100;
+            border: 1px solid #003300;
+        }
+
+        .emoji-item .symbol {
+            font-size: 32px;
+            margin-bottom: 5px;
+        }
+
+        .emoji-item .description {
+            font-size: 11px;
+            color: #00cc00;
+        }
+
+        .decimals {
+            text-align: center;
+            font-size: 32px;
+            color: #00ff00;
+            margin: 20px 0;
+            letter-spacing: 5px;
+        }
+
+        .verification-buttons {
+            display: flex;
+            gap: 10px;
+            margin-top: 20px;
+        }
+
+        .verification-buttons button {
+            flex: 1;
+            padding: 12px;
+            border: 1px solid #00ff00;
+            cursor: pointer;
+            font-family: 'Courier New', monospace;
+            font-size: 14px;
+            transition: all 0.2s;
+        }
+
+        .verification-buttons .accept-btn {
+            background-color: #003300;
+            color: #00ff00;
+        }
+
+        .verification-buttons .accept-btn:hover {
+            background-color: #00ff00;
+            color: #000000;
+            box-shadow: 0 0 10px #00ff00;
+        }
+
+        .verification-buttons .cancel-btn {
+            background-color: #330000;
+            color: #ff0000;
+        }
+
+        .verification-buttons .cancel-btn:hover {
+            background-color: #ff0000;
+            color: #000000;
+            box-shadow: 0 0 10px #ff0000;
+        }
+
+        .verification-buttons button:disabled {
+            background-color: #0a0a0a;
+            color: #004400;
+            border-color: #004400;
+            cursor: not-allowed;
+        }
+
+        .verification-status {
+            text-align: center;
+            padding: 15px;
+            margin: 15px 0;
+            background-color: #001100;
+            border: 1px solid #003300;
+            color: #00cc00;
+        }
     </style>
 </head>
 <body>
@@ -276,6 +417,16 @@
             />
             <button id="login-button">Connect</button>
             <div id="login-error" class="error" style="display: none;"></div>
+        </div>
+    </div>
+
+    <!-- Verification Modal -->
+    <div id="verification-modal" class="hidden">
+        <div class="verification-box">
+            <h2>Device Verification</h2>
+            <div id="verification-content">
+                <!-- Content will be dynamically populated -->
+            </div>
         </div>
     </div>
 
@@ -313,10 +464,14 @@
         const loginButton = document.getElementById('login-button');
         const loginError = document.getElementById('login-error');
         const logoutButton = document.getElementById('logout-button');
+        const verificationModal = document.getElementById('verification-modal');
+        const verificationContent = document.getElementById('verification-content');
 
         let eventSource = null;
         let isConnected = false;
         let credentialsExist = false;
+        let verificationCheckInterval = null;
+        let currentVerificationRequest = null;
 
         // Auto-scroll to bottom
         function scrollToBottom() {
@@ -405,6 +560,7 @@
                     // Load message history and start streaming
                     await loadMessageHistory();
                     connectToStream();
+                    startVerificationChecking();
                 } else {
                     loginError.textContent = result.error || 'Login failed';
                     loginError.style.display = 'block';
@@ -420,6 +576,7 @@
         // Logout from Matrix
         async function logout() {
             try {
+                stopVerificationChecking();
                 await fetch('/api/logout', { method: 'POST' });
                 
                 if (eventSource) {
@@ -535,6 +692,190 @@
             };
         }
 
+        // Verification functions
+        async function checkVerificationRequests() {
+            if (!isConnected) return;
+            
+            try {
+                const response = await fetch('/api/verification/requests');
+                if (response.ok) {
+                    const data = await response.json();
+                    if (data.requests && data.requests.length > 0) {
+                        showVerificationRequest(data.requests[0]);
+                    }
+                }
+                
+                // Check for active SAS
+                const sasResponse = await fetch('/api/verification/sas');
+                if (sasResponse.ok) {
+                    const sasData = await sasResponse.json();
+                    if (sasData.active && sasData.sas_info) {
+                        showSasVerification(sasData.sas_info);
+                    }
+                }
+            } catch (error) {
+                console.error('Failed to check verification requests:', error);
+            }
+        }
+
+        function showVerificationRequest(request) {
+            currentVerificationRequest = request;
+            verificationContent.innerHTML = `
+                <p>A verification request has been received:</p>
+                <div class="verification-request">
+                    <div class="device-info">User: ${request.other_user_id}</div>
+                    <div class="device-info">Device: ${request.other_device_id}</div>
+                </div>
+                <p>Accept this verification request to continue with device verification.</p>
+                <div class="verification-buttons">
+                    <button class="accept-btn" onclick="acceptVerification()">Accept</button>
+                    <button class="cancel-btn" onclick="cancelVerification()">Decline</button>
+                </div>
+            `;
+            verificationModal.classList.remove('hidden');
+        }
+
+        function showSasVerification(sasInfo) {
+            let verificationDisplay = '';
+            
+            if (sasInfo.emoji && sasInfo.emoji.length > 0) {
+                verificationDisplay = '<div class="emoji-grid">';
+                for (const [symbol, description] of sasInfo.emoji) {
+                    verificationDisplay += `
+                        <div class="emoji-item">
+                            <div class="symbol">${symbol}</div>
+                            <div class="description">${description}</div>
+                        </div>
+                    `;
+                }
+                verificationDisplay += '</div>';
+            } else if (sasInfo.decimals) {
+                const [d1, d2, d3] = sasInfo.decimals;
+                verificationDisplay = `<div class="decimals">${d1} ${d2} ${d3}</div>`;
+            }
+            
+            verificationContent.innerHTML = `
+                <p>Verify that the following matches on both devices:</p>
+                ${verificationDisplay}
+                <p>Do these match?</p>
+                <div class="verification-buttons">
+                    <button class="accept-btn" onclick="confirmVerification()">They Match</button>
+                    <button class="cancel-btn" onclick="cancelVerification()">They Don't Match</button>
+                </div>
+            `;
+            verificationModal.classList.remove('hidden');
+        }
+
+        async function acceptVerification() {
+            if (!currentVerificationRequest) return;
+            
+            try {
+                const response = await fetch('/api/verification/accept', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        request_id: currentVerificationRequest.request_id,
+                        other_user_id: currentVerificationRequest.other_user_id
+                    }),
+                });
+                
+                const result = await response.json();
+                if (result.success) {
+                    verificationContent.innerHTML = `
+                        <div class="verification-status">
+                            Verification accepted. Waiting for other device...
+                        </div>
+                    `;
+                } else {
+                    alert('Failed to accept verification: ' + (result.error || 'Unknown error'));
+                    verificationModal.classList.add('hidden');
+                }
+            } catch (error) {
+                alert('Error accepting verification: ' + error.message);
+                verificationModal.classList.add('hidden');
+            }
+        }
+
+        async function confirmVerification() {
+            if (!currentVerificationRequest) return;
+            
+            try {
+                const response = await fetch('/api/verification/confirm', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        request_id: currentVerificationRequest.request_id,
+                        other_user_id: currentVerificationRequest.other_user_id
+                    }),
+                });
+                
+                const result = await response.json();
+                if (result.success) {
+                    verificationContent.innerHTML = `
+                        <div class="verification-status" style="color: #00ff00; text-shadow: 0 0 5px #00ff00;">
+                            ✓ Verification completed successfully!
+                        </div>
+                        <div class="verification-buttons">
+                            <button class="accept-btn" onclick="closeVerificationModal()">Close</button>
+                        </div>
+                    `;
+                    currentVerificationRequest = null;
+                } else {
+                    alert('Failed to confirm verification: ' + (result.error || 'Unknown error'));
+                }
+            } catch (error) {
+                alert('Error confirming verification: ' + error.message);
+            }
+        }
+
+        async function cancelVerification() {
+            if (!currentVerificationRequest) {
+                verificationModal.classList.add('hidden');
+                return;
+            }
+            
+            try {
+                const response = await fetch('/api/verification/cancel', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        request_id: currentVerificationRequest.request_id,
+                        other_user_id: currentVerificationRequest.other_user_id
+                    }),
+                });
+                
+                const result = await response.json();
+                if (result.success) {
+                    verificationModal.classList.add('hidden');
+                    currentVerificationRequest = null;
+                } else {
+                    alert('Failed to cancel verification: ' + (result.error || 'Unknown error'));
+                }
+            } catch (error) {
+                console.error('Error cancelling verification:', error);
+                verificationModal.classList.add('hidden');
+            }
+        }
+
+        function closeVerificationModal() {
+            verificationModal.classList.add('hidden');
+            currentVerificationRequest = null;
+        }
+
+        function startVerificationChecking() {
+            if (verificationCheckInterval) {
+                clearInterval(verificationCheckInterval);
+            }
+            verificationCheckInterval = setInterval(checkVerificationRequests, 3000);
+        }
+
+        function stopVerificationChecking() {
+            if (verificationCheckInterval) {
+                clearInterval(verificationCheckInterval);
+                verificationCheckInterval = null;
+            }
+        }
+
         // Event listeners
         loginButton.addEventListener('click', login);
         
@@ -594,6 +935,7 @@
                 connectionStatus.className = 'status-connected';
                 loadMessageHistory().then(() => {
                     connectToStream();
+                    startVerificationChecking();
                 });
             } else {
                 if (credentialsExist) {

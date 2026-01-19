@@ -1,22 +1,41 @@
 use matrix_sdk::{
     config::SyncSettings,
-    encryption::EncryptionSettings,
+    encryption::{
+        verification::{Verification},
+        EncryptionSettings,
+    },
     room::Room,
     ruma::{
         api::client::message::get_message_events,
         events::room::message::{
             MessageType, OriginalSyncRoomMessageEvent, RoomMessageEventContent,
         },
-        UInt,
+        UInt, UserId,
     },
     Client,
 };
 use std::sync::Arc;
 use tokio::sync::{broadcast, RwLock, Mutex};
 use tracing::{error, info, warn};
+use serde::{Deserialize, Serialize};
 
 pub type MessageSender = broadcast::Sender<String>;
 pub type MessageReceiver = broadcast::Receiver<String>;
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct VerificationRequestInfo {
+    pub request_id: String,
+    pub other_user_id: String,
+    pub other_device_id: String,
+    pub status: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct SasInfo {
+    pub request_id: String,
+    pub emoji: Option<Vec<(String, String)>>,
+    pub decimals: Option<(u16, u16, u16)>,
+}
 
 #[derive(Clone)]
 pub struct MatrixBot {
@@ -29,6 +48,8 @@ pub struct MatrixBot {
     message_tx: MessageSender,
     message_history: Arc<RwLock<Vec<String>>>,
     sync_handle: Arc<Mutex<Option<tokio::task::JoinHandle<()>>>>,
+    verification_requests: Arc<RwLock<Vec<VerificationRequestInfo>>>,
+    active_sas: Arc<RwLock<Option<SasInfo>>>,
 }
 
 impl MatrixBot {
@@ -54,6 +75,8 @@ impl MatrixBot {
             message_tx,
             message_history: Arc::new(RwLock::new(Vec::with_capacity(history_limit))),
             sync_handle: Arc::new(Mutex::new(None)),
+            verification_requests: Arc::new(RwLock::new(Vec::new())),
+            active_sas: Arc::new(RwLock::new(None)),
         };
 
         (bot, message_rx)
@@ -100,6 +123,9 @@ impl MatrixBot {
             .await?;
 
         info!("Login successful");
+        
+        // Set up verification handlers
+        self.setup_verification_handlers(client.clone()).await;
         
         // Set up encryption and cross-signing
         if let Err(e) = Self::setup_encryption(&client).await {
@@ -299,5 +325,157 @@ impl MatrixBot {
 
     pub fn subscribe(&self) -> MessageReceiver {
         self.message_tx.subscribe()
+    }
+
+    // Verification methods
+    pub async fn get_verification_requests(&self) -> Vec<VerificationRequestInfo> {
+        self.verification_requests.read().await.clone()
+    }
+
+    pub async fn get_active_sas(&self) -> Option<SasInfo> {
+        self.active_sas.read().await.clone()
+    }
+
+    pub async fn accept_verification(&self, request_id: &str, other_user_id: &str) -> anyhow::Result<()> {
+        let client_guard = self.client.lock().await;
+        let client = client_guard.as_ref().ok_or_else(|| anyhow::anyhow!("Not connected"))?;
+        
+        let user_id = <&UserId>::try_from(other_user_id)?;
+        
+        // Get the verification request
+        if let Some(request) = client.encryption().get_verification_request(user_id, request_id).await {
+            info!("Accepting verification request: {}", request_id);
+            request.accept().await?;
+            return Ok(());
+        }
+        
+        Err(anyhow::anyhow!("Verification request not found"))
+    }
+
+    pub async fn confirm_verification(&self, request_id: &str, other_user_id: &str) -> anyhow::Result<()> {
+        let client_guard = self.client.lock().await;
+        let client = client_guard.as_ref().ok_or_else(|| anyhow::anyhow!("Not connected"))?;
+        
+        let user_id = <&UserId>::try_from(other_user_id)?;
+        
+        // Get the verification
+        if let Some(verification) = client.encryption().get_verification(user_id, request_id).await {
+            if let Verification::SasV1(sas) = verification {
+                info!("Confirming SAS verification");
+                sas.confirm().await?;
+                
+                // Wait a moment for verification to complete
+                tokio::time::sleep(tokio::time::Duration::from_millis(500)).await;
+                
+                if sas.is_done() {
+                    info!("Verification completed successfully!");
+                    *self.active_sas.write().await = None;
+                }
+                return Ok(());
+            }
+        }
+        
+        Err(anyhow::anyhow!("SAS verification not found"))
+    }
+
+    pub async fn cancel_verification(&self, request_id: &str, other_user_id: &str) -> anyhow::Result<()> {
+        let client_guard = self.client.lock().await;
+        let client = client_guard.as_ref().ok_or_else(|| anyhow::anyhow!("Not connected"))?;
+        
+        let user_id = <&UserId>::try_from(other_user_id)?;
+        
+        if let Some(request) = client.encryption().get_verification_request(user_id, request_id).await {
+            info!("Cancelling verification request: {}", request_id);
+            request.cancel().await?;
+            
+            // Remove from our tracking
+            self.verification_requests.write().await.retain(|r| r.request_id != request_id);
+            
+            // Clear active SAS if it matches
+            let mut active_sas = self.active_sas.write().await;
+            if let Some(ref sas) = *active_sas {
+                if sas.request_id == request_id {
+                    *active_sas = None;
+                }
+            }
+            
+            return Ok(());
+        }
+        
+        Err(anyhow::anyhow!("Verification request not found"))
+    }
+
+    async fn setup_verification_handlers(&self, client: Client) {
+        let bot = self.clone();
+        
+        // Handle incoming verification requests
+        client.add_event_handler(move |ev: matrix_sdk::ruma::events::key::verification::request::ToDeviceKeyVerificationRequestEvent| {
+            let bot = bot.clone();
+            async move {
+                info!("Received verification request from {}", ev.sender);
+                
+                let request_info = VerificationRequestInfo {
+                    request_id: ev.content.transaction_id.to_string(),
+                    other_user_id: ev.sender.to_string(),
+                    other_device_id: ev.content.from_device.to_string(),
+                    status: "pending".to_string(),
+                };
+                
+                bot.verification_requests.write().await.push(request_info);
+                info!("Added verification request to queue");
+            }
+        });
+        
+        let bot = self.clone();
+        
+        // Monitor for SAS verification updates
+        tokio::spawn(async move {
+            loop {
+                tokio::time::sleep(tokio::time::Duration::from_secs(2)).await;
+                
+                let client_guard = bot.client.lock().await;
+                if let Some(ref client) = *client_guard {
+                    // Check all pending verification requests for SAS data
+                    let requests = bot.verification_requests.read().await.clone();
+                    
+                    for req_info in requests {
+                        if let Ok(user_id) = <&UserId>::try_from(req_info.other_user_id.as_str()) {
+                            if let Some(verification) = client.encryption().get_verification(user_id, &req_info.request_id).await {
+                                if let Verification::SasV1(sas) = verification {
+                                    if sas.can_be_presented() {
+                                        // Get emoji or decimals
+                                        let emoji = sas.emoji().map(|emojis| {
+                                            emojis.iter()
+                                                .map(|e| (e.symbol.to_string(), e.description.to_string()))
+                                                .collect()
+                                        });
+                                        
+                                        let decimals = sas.decimals().map(|(a, b, c)| (a, b, c));
+                                        
+                                        let sas_info = SasInfo {
+                                            request_id: req_info.request_id.clone(),
+                                            emoji,
+                                            decimals,
+                                        };
+                                        
+                                        *bot.active_sas.write().await = Some(sas_info);
+                                        info!("SAS verification ready for presentation");
+                                    }
+                                    
+                                    if sas.is_done() {
+                                        info!("SAS verification completed");
+                                        *bot.active_sas.write().await = None;
+                                        // Remove from verification requests
+                                        bot.verification_requests.write().await.retain(|r| r.request_id != req_info.request_id);
+                                    }
+                                }
+                            }
+                        }
+                    }
+                } else {
+                    break;
+                }
+            }
+        });
     }
 }
