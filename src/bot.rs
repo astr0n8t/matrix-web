@@ -222,7 +222,7 @@ impl MatrixBot {
         Ok(())
     }
     
-    pub async fn disconnect(&self, credentials_store: &CredentialStore) -> anyhow::Result<()> {
+    pub async fn disconnect(&self, _credentials_store: &CredentialStore) -> anyhow::Result<()> {
         info!("Disconnecting from Matrix...");
         
         // Stop sync task
@@ -230,24 +230,18 @@ impl MatrixBot {
             handle.abort();
         }
         
-        // Logout
-        if let Some(client) = self.client.lock().await.take() {
-            if let Err(e) = client.matrix_auth().logout().await {
-                warn!("Error during logout: {}", e);
-            }
-        }
+        // Note: We do NOT call logout() on the server or clear the stored session.
+        // This allows the user to reconnect with the same device_id and session,
+        // which is necessary to avoid crypto store device_id mismatch errors.
+        // The session and crypto store will remain valid for future reconnections.
         
-        // Clear the stored session to prevent attempting to restore an invalid session on reconnect
-        if let Err(e) = credentials_store.clear_session() {
-            warn!("Failed to clear stored session: {}", e);
-        } else {
-            info!("Cleared stored session");
-        }
+        // Remove the client reference but keep the session stored for reconnect
+        *self.client.lock().await = None;
         
         // Clear message history
         self.message_history.write().await.clear();
         
-        info!("Bot disconnected");
+        info!("Bot disconnected (session preserved for reconnect)");
         Ok(())
     }
     
