@@ -111,7 +111,6 @@ impl Config {
         let mut config_locations = vec![
             "/config.yaml".to_string(),                // Docker/container location
             "./config.yaml".to_string(),               // Current directory
-            "config.yaml".to_string(),                 // Current directory (relative)
         ];
         
         // Add user config directory if HOME is set
@@ -122,8 +121,6 @@ impl Config {
         // Add system-wide config
         config_locations.push("/etc/matrix-web/config.yaml".to_string());
         
-        let mut last_error = None;
-        
         for path in config_locations.iter() {
             match Self::load(path) {
                 Ok(config) => {
@@ -132,12 +129,15 @@ impl Config {
                 }
                 Err(e) => {
                     tracing::debug!("Failed to load config from {}: {}", path, e);
-                    last_error = Some(e);
                 }
             }
         }
         
-        Err(last_error.unwrap_or_else(|| anyhow::anyhow!("No config file found in any default location")))
+        let locations_list = config_locations.join(", ");
+        Err(anyhow::anyhow!(
+            "No config file found in any default location. Tried: {}",
+            locations_list
+        ))
     }
     
     fn apply_env_overrides(&mut self) {

@@ -14,7 +14,6 @@ async fn main() -> anyhow::Result<()> {
     // Load configuration
     let (config, config_path) = Config::load_from_default_locations().unwrap_or_else(|e| {
         eprintln!("Failed to load config file: {}", e);
-        eprintln!("Tried locations: /config.yaml, ./config.yaml, ~/.config/matrix-web/config.yaml, /etc/matrix-web/config.yaml");
         eprintln!("Please create a config file from config.example.yaml");
         std::process::exit(1);
     });
