@@ -314,40 +314,38 @@ impl MatrixBot {
     async fn load_message_history_with_client(&self, client: &Client, limit: usize) -> anyhow::Result<()> {
         let room_id = <&matrix_sdk::ruma::RoomId>::try_from(self.room_id.as_str())?;
         
-        if client.get_room(room_id).is_some() {
-            info!("Loading message history (limit: {})", limit);
-            
-            // Get room messages
-            let mut request = get_message_events::v3::Request::backward(room_id.to_owned());
-            request.limit = UInt::new(limit as u64).unwrap_or(UInt::new(50).unwrap());
-            
-            match client.send(request, None).await {
-                Ok(response) => {
-                    let mut history = Vec::new();
-                    
-                    // Process messages in reverse order (oldest first)
-                    for event_raw in response.chunk.iter().rev() {
-                        if let Ok(matrix_sdk::ruma::events::AnyTimelineEvent::MessageLike(
-                            matrix_sdk::ruma::events::AnyMessageLikeEvent::RoomMessage(
-                                matrix_sdk::ruma::events::room::message::RoomMessageEvent::Original(msg),
-                            ),
-                        )) = event_raw.deserialize()
-                        {
-                            let sender = msg.sender.to_string();
-                            if let MessageType::Text(text) = msg.content.msgtype {
-                                let formatted_message = format!("{}: {}", sender, text.body);
-                                history.push(formatted_message);
-                            }
+        info!("Loading message history (limit: {})", limit);
+        
+        // Get room messages
+        let mut request = get_message_events::v3::Request::backward(room_id.to_owned());
+        request.limit = UInt::new(limit as u64).unwrap_or(UInt::new(50).unwrap());
+        
+        match client.send(request, None).await {
+            Ok(response) => {
+                let mut history = Vec::new();
+                
+                // Process messages in reverse order (oldest first)
+                for event_raw in response.chunk.iter().rev() {
+                    if let Ok(matrix_sdk::ruma::events::AnyTimelineEvent::MessageLike(
+                        matrix_sdk::ruma::events::AnyMessageLikeEvent::RoomMessage(
+                            matrix_sdk::ruma::events::room::message::RoomMessageEvent::Original(msg),
+                        ),
+                    )) = event_raw.deserialize()
+                    {
+                        let sender = msg.sender.to_string();
+                        if let MessageType::Text(text) = msg.content.msgtype {
+                            let formatted_message = format!("{}: {}", sender, text.body);
+                            history.push(formatted_message);
                         }
                     }
-                    
-                    info!("Loaded {} messages from history", history.len());
-                    let mut msg_history = self.message_history.write().await;
-                    *msg_history = history;
                 }
-                Err(e) => {
-                    error!("Failed to load message history: {}", e);
-                }
+                
+                info!("Loaded {} messages from history", history.len());
+                let mut msg_history = self.message_history.write().await;
+                *msg_history = history;
+            }
+            Err(e) => {
+                error!("Failed to load message history: {}", e);
             }
         }
         
