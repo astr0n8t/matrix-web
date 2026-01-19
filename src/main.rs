@@ -12,7 +12,7 @@ async fn main() -> anyhow::Result<()> {
     tracing_subscriber::fmt::init();
 
     // Load configuration
-    let config = Config::load("config.yaml").unwrap_or_else(|_| {
+    let config = Config::load("/config.yaml").unwrap_or_else(|_| {
         eprintln!("Failed to load config.yaml. Please create it from config.example.yaml");
         std::process::exit(1);
     });
