@@ -152,6 +152,12 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
+      - name: Install cosign
+        if: github.event_name != 'pull_request'
+        uses: sigstore/cosign-installer@v3.8.2
+        with:
+          cosign-release: "v2.2.2"
+
       - name: Create & push multi-arch manifest
         run: |
           IMAGES=""
@@ -163,3 +169,5 @@ jobs:
           docker buildx imagetools create \
             --tag ghcr.io/${{ github.repository }}:latest \
             $(echo $IMAGES)
+
+          cosign sign --yes ghcr.io/${{ github.repository }}:latest
