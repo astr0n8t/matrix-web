@@ -222,6 +222,21 @@ impl MatrixBot {
         Ok(())
     }
     
+    /// Disconnect from Matrix without clearing the session.
+    /// 
+    /// This stops syncing and clears the local client reference, but preserves
+    /// the session (device_id and access_token) for future reconnections. This
+    /// ensures that the crypto store's device_id matches on reconnect, preventing
+    /// "account in the store doesn't match" errors.
+    /// 
+    /// The session remains active on the Matrix server and the device will still
+    /// appear in the user's device list. On reconnect, the same session and
+    /// device_id will be restored.
+    /// 
+    /// # Note
+    /// This is appropriate for a "disconnect/reconnect" flow. For complete logout
+    /// with session cleanup, a separate method would need to be created that calls
+    /// logout() on the server and clears both the session and crypto store.
     pub async fn disconnect(&self, _credentials_store: &CredentialStore) -> anyhow::Result<()> {
         info!("Disconnecting from Matrix...");
         
