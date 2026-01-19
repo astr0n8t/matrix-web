@@ -14,7 +14,7 @@
         body {
             font-family: 'Courier New', monospace;
             background-color: #000000;
-            color: #00ff00;
+            color: #c0c0c0;
             height: 100vh;
             display: flex;
             flex-direction: column;
@@ -23,7 +23,7 @@
         header {
             background-color: #000000;
             padding: 15px 20px;
-            border-bottom: 2px solid #00ff00;
+            border-bottom: 2px solid #404040;
             display: flex;
             justify-content: space-between;
             align-items: center;
@@ -31,15 +31,14 @@
 
         h1 {
             font-size: 1.5em;
-            color: #00ff00;
-            text-shadow: 0 0 10px #00ff00;
+            color: #c0c0c0;
         }
 
         #logout-button {
             padding: 8px 16px;
-            background-color: #330000;
-            color: #ff0000;
-            border: 1px solid #ff0000;
+            background-color: #1a1a1a;
+            color: #808080;
+            border: 1px solid #606060;
             cursor: pointer;
             font-family: 'Courier New', monospace;
             font-size: 12px;
@@ -47,9 +46,9 @@
         }
 
         #logout-button:hover {
-            background-color: #ff0000;
-            color: #000000;
-            box-shadow: 0 0 10px #ff0000;
+            background-color: #303030;
+            color: #c0c0c0;
+            border-color: #808080;
         }
 
         #messages {
@@ -62,29 +61,28 @@
         .message {
             margin-bottom: 10px;
             padding: 5px 10px;
-            border-left: 3px solid #00ff00;
+            border-left: 3px solid #505050;
             background-color: #0a0a0a;
         }
 
         .message .sender {
-            color: #00ff00;
+            color: #909090;
             font-weight: bold;
-            text-shadow: 0 0 5px #00ff00;
         }
 
         .message .content {
-            color: #00cc00;
+            color: #c0c0c0;
             margin-left: 10px;
         }
 
         .message.sent {
-            border-left-color: #00ff00;
+            border-left-color: #707070;
         }
 
         #input-container {
             background-color: #000000;
             padding: 15px 20px;
-            border-top: 2px solid #00ff00;
+            border-top: 2px solid #404040;
             display: flex;
             gap: 10px;
         }
@@ -93,23 +91,22 @@
             flex: 1;
             padding: 10px;
             background-color: #0a0a0a;
-            border: 1px solid #00ff00;
-            color: #00ff00;
+            border: 1px solid #505050;
+            color: #c0c0c0;
             font-family: 'Courier New', monospace;
             font-size: 14px;
         }
 
         #message-input:focus {
             outline: none;
-            border-color: #00ff00;
-            box-shadow: 0 0 10px #00ff00;
+            border-color: #707070;
         }
 
         #send-button {
             padding: 10px 20px;
-            background-color: #003300;
-            color: #00ff00;
-            border: 1px solid #00ff00;
+            background-color: #1a1a1a;
+            color: #c0c0c0;
+            border: 1px solid #505050;
             cursor: pointer;
             font-family: 'Courier New', monospace;
             font-size: 14px;
@@ -117,34 +114,32 @@
         }
 
         #send-button:hover {
-            background-color: #00ff00;
-            color: #000000;
-            box-shadow: 0 0 10px #00ff00;
+            background-color: #303030;
+            color: #e0e0e0;
+            border-color: #707070;
         }
 
         #send-button:disabled {
             background-color: #0a0a0a;
-            color: #004400;
-            border-color: #004400;
+            color: #404040;
+            border-color: #303030;
             cursor: not-allowed;
         }
 
         #status {
             padding: 5px 20px;
             background-color: #000000;
-            border-top: 1px solid #003300;
+            border-top: 1px solid #202020;
             font-size: 12px;
-            color: #00cc00;
+            color: #808080;
         }
 
         .status-connected {
-            color: #00ff00;
-            text-shadow: 0 0 5px #00ff00;
+            color: #a0a0a0;
         }
 
         .status-disconnected {
-            color: #ff0000;
-            text-shadow: 0 0 5px #ff0000;
+            color: #606060;
         }
 
         /* Scrollbar styling */
@@ -157,12 +152,12 @@
         }
 
         #messages::-webkit-scrollbar-thumb {
-            background: #003300;
+            background: #303030;
             border-radius: 5px;
         }
 
         #messages::-webkit-scrollbar-thumb:hover {
-            background: #00ff00;
+            background: #505050;
         }
 
         /* Login Modal */
@@ -185,22 +180,20 @@
 
         .login-box {
             background-color: #0a0a0a;
-            border: 2px solid #00ff00;
-            box-shadow: 0 0 20px #00ff00;
+            border: 2px solid #606060;
             padding: 40px;
             max-width: 400px;
             width: 90%;
         }
 
         .login-box h2 {
-            color: #00ff00;
-            text-shadow: 0 0 10px #00ff00;
+            color: #c0c0c0;
             margin-bottom: 20px;
             text-align: center;
         }
 
         .login-box p {
-            color: #00cc00;
+            color: #909090;
             margin-bottom: 20px;
             line-height: 1.5;
         }
@@ -209,8 +202,8 @@
             width: 100%;
             padding: 12px;
             background-color: #0a0a0a;
-            border: 1px solid #00ff00;
-            color: #00ff00;
+            border: 1px solid #505050;
+            color: #c0c0c0;
             font-family: 'Courier New', monospace;
             font-size: 14px;
             margin-bottom: 20px;
@@ -218,16 +211,15 @@
 
         .login-box input[type="password"]:focus {
             outline: none;
-            border-color: #00ff00;
-            box-shadow: 0 0 10px #00ff00;
+            border-color: #707070;
         }
 
         .login-box button {
             width: 100%;
             padding: 12px;
-            background-color: #003300;
-            color: #00ff00;
-            border: 1px solid #00ff00;
+            background-color: #1a1a1a;
+            color: #c0c0c0;
+            border: 1px solid #505050;
             cursor: pointer;
             font-family: 'Courier New', monospace;
             font-size: 14px;
@@ -235,21 +227,20 @@
         }
 
         .login-box button:hover {
-            background-color: #00ff00;
-            color: #000000;
-            box-shadow: 0 0 10px #00ff00;
+            background-color: #303030;
+            color: #e0e0e0;
+            border-color: #707070;
         }
 
         .login-box button:disabled {
             background-color: #0a0a0a;
-            color: #004400;
-            border-color: #004400;
+            color: #404040;
+            border-color: #303030;
             cursor: not-allowed;
         }
 
         .login-box .error {
-            color: #ff0000;
-            text-shadow: 0 0 5px #ff0000;
+            color: #808080;
             margin-top: 10px;
             text-align: center;
         }
@@ -274,8 +265,7 @@
 
         .verification-box {
             background-color: #0a0a0a;
-            border: 2px solid #00ff00;
-            box-shadow: 0 0 20px #00ff00;
+            border: 2px solid #606060;
             padding: 40px;
             max-width: 500px;
             width: 90%;
@@ -284,27 +274,26 @@
         }
 
         .verification-box h2 {
-            color: #00ff00;
-            text-shadow: 0 0 10px #00ff00;
+            color: #c0c0c0;
             margin-bottom: 20px;
             text-align: center;
         }
 
         .verification-box p {
-            color: #00cc00;
+            color: #909090;
             margin-bottom: 15px;
             line-height: 1.5;
         }
 
         .verification-request {
-            background-color: #001100;
-            border: 1px solid #00ff00;
+            background-color: #151515;
+            border: 1px solid #505050;
             padding: 15px;
             margin-bottom: 15px;
         }
 
         .verification-request .device-info {
-            color: #00cc00;
+            color: #909090;
             margin-bottom: 10px;
             font-size: 14px;
         }
@@ -319,8 +308,8 @@
         .emoji-item {
             text-align: center;
             padding: 10px;
-            background-color: #001100;
-            border: 1px solid #003300;
+            background-color: #151515;
+            border: 1px solid #404040;
         }
 
         .emoji-item .symbol {
@@ -330,13 +319,13 @@
 
         .emoji-item .description {
             font-size: 11px;
-            color: #00cc00;
+            color: #909090;
         }
 
         .decimals {
             text-align: center;
             font-size: 32px;
-            color: #00ff00;
+            color: #c0c0c0;
             margin: 20px 0;
             letter-spacing: 5px;
         }
@@ -350,7 +339,7 @@
         .verification-buttons button {
             flex: 1;
             padding: 12px;
-            border: 1px solid #00ff00;
+            border: 1px solid #505050;
             cursor: pointer;
             font-family: 'Courier New', monospace;
             font-size: 14px;
@@ -358,31 +347,31 @@
         }
 
         .verification-buttons .accept-btn {
-            background-color: #003300;
-            color: #00ff00;
+            background-color: #1a1a1a;
+            color: #c0c0c0;
         }
 
         .verification-buttons .accept-btn:hover {
-            background-color: #00ff00;
-            color: #000000;
-            box-shadow: 0 0 10px #00ff00;
+            background-color: #303030;
+            color: #e0e0e0;
+            border-color: #707070;
         }
 
         .verification-buttons .cancel-btn {
-            background-color: #330000;
-            color: #ff0000;
+            background-color: #1a1a1a;
+            color: #808080;
         }
 
         .verification-buttons .cancel-btn:hover {
-            background-color: #ff0000;
-            color: #000000;
-            box-shadow: 0 0 10px #ff0000;
+            background-color: #303030;
+            color: #a0a0a0;
+            border-color: #707070;
         }
 
         .verification-buttons button:disabled {
             background-color: #0a0a0a;
-            color: #004400;
-            border-color: #004400;
+            color: #404040;
+            border-color: #303030;
             cursor: not-allowed;
         }
 
@@ -390,9 +379,9 @@
             text-align: center;
             padding: 15px;
             margin: 15px 0;
-            background-color: #001100;
-            border: 1px solid #003300;
-            color: #00cc00;
+            background-color: #151515;
+            border: 1px solid #404040;
+            color: #909090;
         }
     </style>
 </head>
@@ -813,7 +802,7 @@
                 const result = await response.json();
                 if (result.success) {
                     verificationContent.innerHTML = `
-                        <div class="verification-status" style="color: #00ff00; text-shadow: 0 0 5px #00ff00;">
+                        <div class="verification-status" style="color: #c0c0c0;">
                             ✓ Verification completed successfully!
                         </div>
                         <div class="verification-buttons">
