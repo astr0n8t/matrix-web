@@ -430,7 +430,12 @@ impl MatrixBot {
                 // and accept the SAS verification to start the emoji/decimal generation
                 info!("Waiting for verification request to transition to SAS...");
                 for sas_attempt in 0..MAX_SAS_TRANSITION_ATTEMPTS {
-                    tokio::time::sleep(tokio::time::Duration::from_millis(SAS_TRANSITION_RETRY_DELAY_MS)).await;
+                    // Check immediately on first attempt, then wait before subsequent attempts
+                    if sas_attempt > 0 {
+                        tokio::time::sleep(tokio::time::Duration::from_millis(SAS_TRANSITION_RETRY_DELAY_MS)).await;
+                    }
+                    
+                    info!("Checking for SAS verification (attempt {}/{})", sas_attempt + 1, MAX_SAS_TRANSITION_ATTEMPTS);
                     
                     if let Some(verification) = client.encryption().get_verification(user_id, request_id).await {
                         if let Verification::SasV1(sas) = verification {
@@ -442,7 +447,8 @@ impl MatrixBot {
                                 }
                                 Err(e) => {
                                     // Note: Error message matching is fragile but necessary since matrix-sdk
-                                    // doesn't provide specific error types for this case
+                                    // doesn't provide specific error types for this case. This is a known
+                                    // limitation and acceptable given the alternatives.
                                     let err_str = e.to_string();
                                     if err_str.contains("already") || err_str.contains("accepted") {
                                         info!("SAS verification was already accepted");
@@ -454,10 +460,6 @@ impl MatrixBot {
                                 }
                             }
                         }
-                    }
-                    
-                    if sas_attempt < MAX_SAS_TRANSITION_ATTEMPTS - 1 {
-                        info!("SAS not ready yet, waiting... (attempt {}/{})", sas_attempt + 1, MAX_SAS_TRANSITION_ATTEMPTS);
                     }
                 }
                 
