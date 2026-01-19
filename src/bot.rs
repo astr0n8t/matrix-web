@@ -23,8 +23,8 @@ use anyhow::Context;
 use crate::credentials::CredentialStore;
 
 // Constants for SAS verification retry logic
-const MAX_SAS_TRANSITION_ATTEMPTS: u32 = 10;
-const SAS_TRANSITION_RETRY_DELAY_MS: u64 = 500;
+const MAX_SAS_TRANSITION_ATTEMPTS: u32 = 150;
+const SAS_TRANSITION_RETRY_DELAY_MS: u64 = 2000;
 
 pub type MessageSender = broadcast::Sender<String>;
 pub type MessageReceiver = broadcast::Receiver<String>;
