@@ -212,7 +212,7 @@ impl CredentialStore {
         .context("Failed to clear session")?;
 
         if rows_affected == 0 {
-            tracing::warn!("No credentials row found when clearing session");
+            tracing::warn!("No credentials row found when clearing session - this may indicate the bot was never logged in or the database is in an inconsistent state");
         }
 
         Ok(())
