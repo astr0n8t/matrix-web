@@ -12,7 +12,7 @@ use std::sync::Arc;
 use tokio_stream::{wrappers::BroadcastStream, StreamExt};
 use tracing::{info, warn};
 
-use crate::bot::MatrixBot;
+use crate::bot::{MatrixBot, VerificationRequestInfo, SasInfo};
 use crate::config::{AuthConfig, hash_value};
 use crate::credentials::CredentialStore;
 
@@ -58,6 +58,29 @@ pub struct StatusResponse {
     pub credentials_exist: bool,
 }
 
+#[derive(Deserialize)]
+pub struct VerificationActionRequest {
+    pub request_id: String,
+    pub other_user_id: String,
+}
+
+#[derive(Serialize)]
+pub struct VerificationResponse {
+    pub success: bool,
+    pub error: Option<String>,
+}
+
+#[derive(Serialize)]
+pub struct VerificationRequestsResponse {
+    pub requests: Vec<VerificationRequestInfo>,
+}
+
+#[derive(Serialize)]
+pub struct SasStatusResponse {
+    pub active: bool,
+    pub sas_info: Option<SasInfo>,
+}
+
 pub fn create_router(state: AppState) -> Router {
     let router = Router::new()
         .route("/", get(index_handler))
@@ -66,7 +89,12 @@ pub fn create_router(state: AppState) -> Router {
         .route("/api/status", get(status_handler))
         .route("/api/messages", post(send_message_handler))
         .route("/api/history", get(get_message_history_handler))
-        .route("/api/stream", get(stream_messages_handler));
+        .route("/api/stream", get(stream_messages_handler))
+        .route("/api/verification/requests", get(get_verification_requests_handler))
+        .route("/api/verification/accept", post(accept_verification_handler))
+        .route("/api/verification/confirm", post(confirm_verification_handler))
+        .route("/api/verification/cancel", post(cancel_verification_handler))
+        .route("/api/verification/sas", get(get_sas_status_handler));
 
     // Apply authentication middleware if configured
     if state.auth.is_some() {
@@ -308,6 +336,87 @@ async fn stream_messages_handler(
     });
 
     Sse::new(stream)
+}
+
+async fn get_verification_requests_handler(
+    State(state): State<Arc<AppState>>,
+) -> impl IntoResponse {
+    let requests = state.bot.get_verification_requests().await;
+    Json(VerificationRequestsResponse { requests })
+}
+
+async fn get_sas_status_handler(
+    State(state): State<Arc<AppState>>,
+) -> impl IntoResponse {
+    let sas_info = state.bot.get_active_sas().await;
+    let active = sas_info.is_some();
+    Json(SasStatusResponse { active, sas_info })
+}
+
+async fn accept_verification_handler(
+    State(state): State<Arc<AppState>>,
+    Json(payload): Json<VerificationActionRequest>,
+) -> impl IntoResponse {
+    match state.bot.accept_verification(&payload.request_id, &payload.other_user_id).await {
+        Ok(_) => (
+            StatusCode::OK,
+            Json(VerificationResponse {
+                success: true,
+                error: None,
+            }),
+        ),
+        Err(e) => (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            Json(VerificationResponse {
+                success: false,
+                error: Some(e.to_string()),
+            }),
+        ),
+    }
+}
+
+async fn confirm_verification_handler(
+    State(state): State<Arc<AppState>>,
+    Json(payload): Json<VerificationActionRequest>,
+) -> impl IntoResponse {
+    match state.bot.confirm_verification(&payload.request_id, &payload.other_user_id).await {
+        Ok(_) => (
+            StatusCode::OK,
+            Json(VerificationResponse {
+                success: true,
+                error: None,
+            }),
+        ),
+        Err(e) => (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            Json(VerificationResponse {
+                success: false,
+                error: Some(e.to_string()),
+            }),
+        ),
+    }
+}
+
+async fn cancel_verification_handler(
+    State(state): State<Arc<AppState>>,
+    Json(payload): Json<VerificationActionRequest>,
+) -> impl IntoResponse {
+    match state.bot.cancel_verification(&payload.request_id, &payload.other_user_id).await {
+        Ok(_) => (
+            StatusCode::OK,
+            Json(VerificationResponse {
+                success: true,
+                error: None,
+            }),
+        ),
+        Err(e) => (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            Json(VerificationResponse {
+                success: false,
+                error: Some(e.to_string()),
+            }),
+        ),
+    }
 }
 
 pub async fn start_server(host: &str, port: u16, state: AppState) -> anyhow::Result<()> {
