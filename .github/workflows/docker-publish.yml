@@ -171,7 +171,7 @@ jobs:
             # Skip empty lines just in case
             [[ -z "$tag" ]] && continue
             docker buildx imagetools create \
-              --tag ghcr.io/${{ github.repository }}:$tag \
+              --tag $tag \
               $(echo $IMAGES)
-            cosign sign --yes ghcr.io/${{ github.repository }}:$tag
+            cosign sign --yes $tag
           done
