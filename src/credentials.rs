@@ -205,11 +205,15 @@ impl CredentialStore {
         self.init_db(&conn)?;
 
         // Clear the session fields by setting them to NULL
-        conn.execute(
+        let rows_affected = conn.execute(
             "UPDATE credentials SET device_id = NULL, access_token_encrypted = NULL, user_id = NULL WHERE id = 1",
             [],
         )
         .context("Failed to clear session")?;
+
+        if rows_affected == 0 {
+            tracing::warn!("No credentials row found when clearing session");
+        }
 
         Ok(())
     }
