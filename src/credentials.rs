@@ -30,7 +30,9 @@ impl CredentialStore {
             "CREATE TABLE IF NOT EXISTS credentials (
                 id INTEGER PRIMARY KEY,
                 username TEXT NOT NULL,
-                password_encrypted BLOB NOT NULL
+                password_encrypted BLOB NOT NULL,
+                device_id TEXT,
+                access_token_encrypted BLOB
             )",
             [],
         )
@@ -121,5 +123,65 @@ impl CredentialStore {
         let password = self.decrypt_password(&encrypted, sqlite_password)?;
 
         Ok((username, password))
+    }
+
+    /// Check if a session exists (has device_id and access_token)
+    pub fn session_exists(&self) -> Result<bool> {
+        let conn = Connection::open(&self.db_path)?;
+        self.init_db(&conn)?;
+
+        let mut stmt = conn.prepare(
+            "SELECT device_id, access_token_encrypted FROM credentials WHERE id = 1"
+        )?;
+        
+        let result: Result<(Option<String>, Option<Vec<u8>>), _> = stmt.query_row([], |row| {
+            Ok((row.get(0)?, row.get(1)?))
+        });
+
+        match result {
+            Ok((Some(device_id), Some(access_token))) => {
+                Ok(!device_id.is_empty() && !access_token.is_empty())
+            }
+            _ => Ok(false),
+        }
+    }
+
+    /// Store session data (device_id and access_token)
+    pub fn store_session(
+        &self,
+        device_id: &str,
+        access_token: &str,
+        sqlite_password: &str,
+    ) -> Result<()> {
+        let conn = Connection::open(&self.db_path)?;
+        self.init_db(&conn)?;
+
+        let encrypted_token = self.encrypt_password(access_token, sqlite_password);
+
+        conn.execute(
+            "UPDATE credentials SET device_id = ?1, access_token_encrypted = ?2 WHERE id = 1",
+            (device_id, encrypted_token),
+        )
+        .context("Failed to store session")?;
+
+        Ok(())
+    }
+
+    /// Retrieve session data (device_id and access_token)
+    pub fn get_session(&self, sqlite_password: &str) -> Result<(String, String)> {
+        let conn = Connection::open(&self.db_path)?;
+        self.init_db(&conn)?;
+
+        let mut stmt = conn.prepare(
+            "SELECT device_id, access_token_encrypted FROM credentials WHERE id = 1"
+        )?;
+        
+        let (device_id, encrypted_token): (String, Vec<u8>) = stmt.query_row([], |row| {
+            Ok((row.get(0)?, row.get(1)?))
+        })?;
+
+        let access_token = self.decrypt_password(&encrypted_token, sqlite_password)?;
+
+        Ok((device_id, access_token))
     }
 }

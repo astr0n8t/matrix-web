@@ -4,6 +4,7 @@ use matrix_sdk::{
         verification::{Verification},
         EncryptionSettings,
     },
+    matrix_auth::{MatrixSession, MatrixSessionTokens},
     room::Room,
     ruma::{
         api::client::message::get_message_events,
@@ -12,12 +13,14 @@ use matrix_sdk::{
         },
         UInt, UserId,
     },
-    Client,
+    Client, SessionMeta,
 };
 use std::sync::Arc;
 use tokio::sync::{broadcast, RwLock, Mutex};
 use tracing::{error, info, warn};
 use serde::{Deserialize, Serialize};
+
+use crate::credentials::CredentialStore;
 
 pub type MessageSender = broadcast::Sender<String>;
 pub type MessageReceiver = broadcast::Receiver<String>;
@@ -86,7 +89,7 @@ impl MatrixBot {
         self.client.lock().await.is_some()
     }
     
-    pub async fn connect(&self, matrix_password: &str, store_passphrase: &str) -> anyhow::Result<()> {
+    pub async fn connect(&self, matrix_password: &str, store_passphrase: &str, credentials_store: &CredentialStore) -> anyhow::Result<()> {
         // Check if already connected
         if self.is_connected().await {
             return Ok(());
@@ -115,12 +118,70 @@ impl MatrixBot {
             .build()
             .await?;
 
-        info!("Logging in as {}", self.username);
-        client
-            .matrix_auth()
-            .login_username(&self.username, matrix_password)
-            .initial_device_display_name("Matrix Web Bot")
-            .await?;
+        // Check if we have an existing session to restore
+        let session_exists = credentials_store.session_exists().unwrap_or(false);
+        
+        if session_exists {
+            info!("Found existing session, attempting to restore...");
+            match credentials_store.get_session(store_passphrase) {
+                Ok((device_id, access_token)) => {
+                    info!("Restoring session with device_id: {}", device_id);
+                    
+                    let session = MatrixSession {
+                        meta: SessionMeta {
+                            user_id: self.username.as_str().try_into()?,
+                            device_id: device_id.as_str().into(),
+                        },
+                        tokens: MatrixSessionTokens {
+                            access_token,
+                            refresh_token: None,
+                        },
+                    };
+                    
+                    client.matrix_auth().restore_session(session).await?;
+                    info!("Session restored successfully");
+                }
+                Err(e) => {
+                    warn!("Failed to restore session: {}. Falling back to login.", e);
+                    // Fall back to login if session restore fails
+                    client
+                        .matrix_auth()
+                        .login_username(&self.username, matrix_password)
+                        .initial_device_display_name("Matrix Web Bot")
+                        .await?;
+                    
+                    // Save the new session
+                    if let Some(session) = client.session() {
+                        if let Err(e) = credentials_store.store_session(
+                            session.meta().device_id.as_str(),
+                            session.access_token(),
+                            store_passphrase,
+                        ) {
+                            warn!("Failed to store session: {}", e);
+                        }
+                    }
+                }
+            }
+        } else {
+            info!("No existing session found, logging in as {}", self.username);
+            client
+                .matrix_auth()
+                .login_username(&self.username, matrix_password)
+                .initial_device_display_name("Matrix Web Bot")
+                .await?;
+
+            // Save the session after successful login
+            if let Some(session) = client.session() {
+                info!("Saving session with device_id: {}", session.meta().device_id);
+                if let Err(e) = credentials_store.store_session(
+                    session.meta().device_id.as_str(),
+                    session.access_token(),
+                    store_passphrase,
+                ) {
+                    warn!("Failed to store session: {}", e);
+                }
+            }
+        }
 
         info!("Login successful");
         
