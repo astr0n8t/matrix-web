@@ -165,9 +165,13 @@ jobs:
             digest=$(basename "$digestfile")
             IMAGES="$IMAGES ghcr.io/${{ github.repository }}@sha256:$digest"
           done
+          mapfile -t tag_array <<< "${{ steps.meta.outputs.tags }}"
 
-          docker buildx imagetools create \
-            --tag ghcr.io/${{ github.repository }}:latest \
-            $(echo $IMAGES)
-
-          cosign sign --yes ghcr.io/${{ github.repository }}:latest
+          for tag in "${tag_array[@]}"; do
+            # Skip empty lines just in case
+            [[ -z "$tag" ]] && continue
+            docker buildx imagetools create \
+              --tag ghcr.io/${{ github.repository }}:$tag \
+              $(echo $IMAGES)
+            cosign sign --yes ghcr.io/${{ github.repository }}:$tag
+          done
