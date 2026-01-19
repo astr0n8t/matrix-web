@@ -458,24 +458,32 @@ impl MatrixBot {
         
         let user_id = <&UserId>::try_from(other_user_id)?;
         
-        // Get the verification
-        if let Some(verification) = client.encryption().get_verification(user_id, request_id).await {
-            if let Verification::SasV1(sas) = verification {
-                info!("Confirming SAS verification");
-                sas.confirm().await?;
-                
-                // Wait a moment for verification to complete
-                tokio::time::sleep(tokio::time::Duration::from_millis(500)).await;
-                
-                if sas.is_done() {
-                    info!("Verification completed successfully!");
-                    *self.active_sas.write().await = None;
+        // Try to get the verification with retries (in case SDK is still processing)
+        for attempt in 0..5 {
+            if attempt > 0 {
+                info!("Retry attempt {} to get SAS verification", attempt);
+                tokio::time::sleep(tokio::time::Duration::from_millis(200)).await;
+            }
+            
+            // Get the verification
+            if let Some(verification) = client.encryption().get_verification(user_id, request_id).await {
+                if let Verification::SasV1(sas) = verification {
+                    info!("Confirming SAS verification");
+                    sas.confirm().await?;
+                    
+                    // Wait a moment for verification to complete
+                    tokio::time::sleep(tokio::time::Duration::from_millis(500)).await;
+                    
+                    if sas.is_done() {
+                        info!("Verification completed successfully!");
+                        *self.active_sas.write().await = None;
+                    }
+                    return Ok(());
                 }
-                return Ok(());
             }
         }
         
-        Err(anyhow::anyhow!("SAS verification not found"))
+        Err(anyhow::anyhow!("SAS verification not found after retries"))
     }
 
     pub async fn cancel_verification(&self, request_id: &str, other_user_id: &str) -> anyhow::Result<()> {
