@@ -100,7 +100,7 @@ impl MatrixBot {
         // Configure encryption settings
         let encryption_settings = EncryptionSettings {
             auto_enable_cross_signing: true,
-            auto_enable_backups: true,
+            auto_enable_backups: false,
             ..Default::default()
         };
         
@@ -256,12 +256,12 @@ impl MatrixBot {
             Self::try_bootstrap_cross_signing(&encryption).await;
         }
         
-        // Note: Backups are automatically managed by the SDK when cross-signing is set up
-        // The SDK will automatically restore and enable backups when the device is verified
-        info!("Encryption setup complete. Key backups will be enabled automatically after device verification.");
+        // Note: Backups are disabled to avoid warning messages before device verification
+        // Users can manually enable backups via Element client after verification if needed
+        info!("Encryption setup complete. Device verification recommended for full E2EE functionality.");
         info!("To complete setup:");
         info!("1. Open Element on another device where you're logged in");
-        info!("2. Verify this new session to enable key backups");
+        info!("2. Verify this new session");
         
         Ok(())
     }
