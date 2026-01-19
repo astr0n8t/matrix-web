@@ -431,21 +431,46 @@ impl MatrixBot {
                     // If it's already in SAS mode and can be presented, it still needs to be accepted
                     if sas.can_be_presented() {
                         info!("SAS verification is ready for presentation, accepting it");
-                        if let Err(e) = sas.accept().await {
-                            warn!("Failed to accept SAS verification (might already be accepted): {}", e);
+                        match sas.accept().await {
+                            Ok(_) => {
+                                info!("Successfully accepted SAS verification");
+                                return Ok(());
+                            }
+                            Err(e) => {
+                                // Check if the error is benign (already accepted)
+                                let err_str = e.to_string();
+                                if err_str.contains("already") || err_str.contains("accepted") {
+                                    info!("SAS verification was already accepted");
+                                    return Ok(());
+                                } else {
+                                    warn!("Failed to accept SAS verification: {}", e);
+                                    return Err(e.into());
+                                }
+                            }
                         }
-                        return Ok(());
                     }
                     // If it's in another state, try to accept it anyway
                     info!("Attempting to accept SAS verification");
-                    if let Err(e) = sas.accept().await {
-                        warn!("Could not accept SAS (might already be accepted or in wrong state): {}", e);
+                    match sas.accept().await {
+                        Ok(_) => {
+                            info!("Successfully accepted SAS verification");
+                            return Ok(());
+                        }
+                        Err(e) => {
+                            let err_str = e.to_string();
+                            if err_str.contains("already") || err_str.contains("accepted") || err_str.contains("state") {
+                                info!("SAS verification might already be accepted or in different state: {}", e);
+                                return Ok(());
+                            } else {
+                                warn!("Failed to accept SAS verification: {}", e);
+                                return Err(e.into());
+                            }
+                        }
                     }
-                    return Ok(());
                 } else {
-                    info!("Verification is not SasV1 type, other verification types not currently supported");
+                    warn!("Verification is not SasV1 type, other verification types not currently supported");
+                    return Err(anyhow::anyhow!("Unsupported verification type"));
                 }
-                return Ok(());
             }
         }
         
