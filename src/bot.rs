@@ -428,16 +428,22 @@ impl MatrixBot {
             if let Some(verification) = client.encryption().get_verification(user_id, request_id).await {
                 info!("Verification request already transitioned to verification flow");
                 if let Verification::SasV1(sas) = verification {
-                    // If it's already in SAS mode and can be presented, accept it
+                    // If it's already in SAS mode and can be presented, it still needs to be accepted
                     if sas.can_be_presented() {
-                        info!("SAS verification is ready for presentation");
+                        info!("SAS verification is ready for presentation, accepting it");
+                        if let Err(e) = sas.accept().await {
+                            warn!("Failed to accept SAS verification (might already be accepted): {}", e);
+                        }
                         return Ok(());
                     }
-                    // If it can be accepted, accept it
+                    // If it's in another state, try to accept it anyway
+                    info!("Attempting to accept SAS verification");
                     if let Err(e) = sas.accept().await {
-                        info!("Could not accept SAS (might already be accepted): {}", e);
+                        warn!("Could not accept SAS (might already be accepted or in wrong state): {}", e);
                     }
                     return Ok(());
+                } else {
+                    info!("Verification is not SasV1 type, other verification types not currently supported");
                 }
                 return Ok(());
             }
