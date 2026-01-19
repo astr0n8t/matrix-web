@@ -2,6 +2,9 @@
 
 An end-to-end encrypted Matrix/Element bot with a simple IRC-like web interface built with Rust.
 
+> [!WARNING]
+> This project is mostly vibe-coded using copilot
+
 ## Features
 
 - **End-to-end encryption (E2EE)** with automatic cross-signing and backup support
