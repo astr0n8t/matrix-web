@@ -260,7 +260,7 @@ async fn login_handler(
 async fn logout_handler(
     State(state): State<Arc<AppState>>,
 ) -> impl IntoResponse {
-    match state.bot.disconnect().await {
+    match state.bot.disconnect(&state.credentials_store).await {
         Ok(_) => {
             info!("Bot disconnected successfully");
             (

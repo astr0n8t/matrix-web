@@ -222,7 +222,7 @@ impl MatrixBot {
         Ok(())
     }
     
-    pub async fn disconnect(&self) -> anyhow::Result<()> {
+    pub async fn disconnect(&self, credentials_store: &CredentialStore) -> anyhow::Result<()> {
         info!("Disconnecting from Matrix...");
         
         // Stop sync task
@@ -235,6 +235,13 @@ impl MatrixBot {
             if let Err(e) = client.matrix_auth().logout().await {
                 warn!("Error during logout: {}", e);
             }
+        }
+        
+        // Clear the stored session to prevent attempting to restore an invalid session on reconnect
+        if let Err(e) = credentials_store.clear_session() {
+            warn!("Failed to clear stored session: {}", e);
+        } else {
+            info!("Cleared stored session");
         }
         
         // Clear message history

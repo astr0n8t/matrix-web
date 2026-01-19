@@ -197,4 +197,20 @@ impl CredentialStore {
 
         Ok((device_id, access_token, user_id))
     }
+
+    /// Clear session data (device_id, access_token, and user_id)
+    /// This should be called when logging out to prevent attempting to restore an invalid session
+    pub fn clear_session(&self) -> Result<()> {
+        let conn = Connection::open(&self.db_path)?;
+        self.init_db(&conn)?;
+
+        // Clear the session fields by setting them to NULL
+        conn.execute(
+            "UPDATE credentials SET device_id = NULL, access_token_encrypted = NULL, user_id = NULL WHERE id = 1",
+            [],
+        )
+        .context("Failed to clear session")?;
+
+        Ok(())
+    }
 }
