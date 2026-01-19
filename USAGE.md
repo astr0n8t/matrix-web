@@ -216,8 +216,6 @@ To enable full E2EE functionality and resolve the backup key warning:
 #### What Happens During Verification
 - The bot's device gets trusted by your account
 - Cross-signing keys are exchanged
-- Key backups are automatically enabled
-- The warning `"Trying to backup room keys but no backup key was found"` stops appearing
 - The bot can now fully participate in encrypted rooms
 
 #### Encryption Store Management
@@ -253,11 +251,6 @@ To enable full E2EE functionality and resolve the backup key warning:
 - Check browser console for error messages
 
 ### Encryption warnings or errors
-
-**Warning: "Trying to backup room keys but no backup key was found"**
-- This is expected on first run before device verification
-- Verify the bot device via Element (see E2EE section above)
-- The warning will stop once verification is complete
 
 **Error: "Failed to decrypt message"**
 - Ensure the bot device has been verified via Element

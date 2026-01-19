@@ -68,15 +68,13 @@ The bot automatically configures end-to-end encryption with the following featur
 
 1. **Persistent SQLite Store**: Encryption keys are stored in a local SQLite database (default: `./matrix_store`)
 2. **Automatic Cross-Signing**: The bot attempts to bootstrap cross-signing on first run
-3. **Device Verification**: To enable full E2EE functionality and avoid backup warnings:
+3. **Device Verification**: To enable full E2EE functionality:
 
    - On first run, the bot will log messages about device verification
    - Open Element on another device where you're logged in
    - Go to Settings → Security & Privacy → Cross-signing
    - Verify the new "Matrix Web Bot" device session
-   - Once verified, key backups will automatically be enabled
-
-**Note**: The warning `"Trying to backup room keys but no backup key was found"` will appear until you verify the device via another Element session. After verification, the bot will automatically join the backup system and the warning will stop.
+   - Once verified, the bot is fully set up for encrypted messaging
 
 ### Generating Authentication Hash
 
