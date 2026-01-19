@@ -700,7 +700,8 @@
                 const response = await fetch('/api/verification/requests');
                 if (response.ok) {
                     const data = await response.json();
-                    if (data.requests && data.requests.length > 0) {
+                    if (data.requests && data.requests.length > 0 && !currentVerificationRequest) {
+                        // Show the first pending request only if no request is currently being handled
                         showVerificationRequest(data.requests[0]);
                     }
                 }

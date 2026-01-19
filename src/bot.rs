@@ -433,47 +433,51 @@ impl MatrixBot {
             loop {
                 tokio::time::sleep(tokio::time::Duration::from_secs(2)).await;
                 
-                let client_guard = bot.client.lock().await;
-                if let Some(ref client) = *client_guard {
-                    // Check all pending verification requests for SAS data
-                    let requests = bot.verification_requests.read().await.clone();
-                    
-                    for req_info in requests {
-                        if let Ok(user_id) = <&UserId>::try_from(req_info.other_user_id.as_str()) {
-                            if let Some(verification) = client.encryption().get_verification(user_id, &req_info.request_id).await {
-                                if let Verification::SasV1(sas) = verification {
-                                    if sas.can_be_presented() {
-                                        // Get emoji or decimals
-                                        let emoji = sas.emoji().map(|emojis| {
-                                            emojis.iter()
-                                                .map(|e| (e.symbol.to_string(), e.description.to_string()))
-                                                .collect()
-                                        });
-                                        
-                                        let decimals = sas.decimals().map(|(a, b, c)| (a, b, c));
-                                        
-                                        let sas_info = SasInfo {
-                                            request_id: req_info.request_id.clone(),
-                                            emoji,
-                                            decimals,
-                                        };
-                                        
-                                        *bot.active_sas.write().await = Some(sas_info);
-                                        info!("SAS verification ready for presentation");
-                                    }
+                let client = {
+                    let client_guard = bot.client.lock().await;
+                    if let Some(ref client) = *client_guard {
+                        client.clone()
+                    } else {
+                        break;
+                    }
+                };
+                
+                // Check all pending verification requests for SAS data
+                let requests = bot.verification_requests.read().await.clone();
+                
+                for req_info in requests {
+                    if let Ok(user_id) = <&UserId>::try_from(req_info.other_user_id.as_str()) {
+                        if let Some(verification) = client.encryption().get_verification(user_id, &req_info.request_id).await {
+                            if let Verification::SasV1(sas) = verification {
+                                if sas.can_be_presented() {
+                                    // Get emoji or decimals
+                                    let emoji = sas.emoji().map(|emojis| {
+                                        emojis.iter()
+                                            .map(|e| (e.symbol.to_string(), e.description.to_string()))
+                                            .collect()
+                                    });
                                     
-                                    if sas.is_done() {
-                                        info!("SAS verification completed");
-                                        *bot.active_sas.write().await = None;
-                                        // Remove from verification requests
-                                        bot.verification_requests.write().await.retain(|r| r.request_id != req_info.request_id);
-                                    }
+                                    let decimals = sas.decimals().map(|(a, b, c)| (a, b, c));
+                                    
+                                    let sas_info = SasInfo {
+                                        request_id: req_info.request_id.clone(),
+                                        emoji,
+                                        decimals,
+                                    };
+                                    
+                                    *bot.active_sas.write().await = Some(sas_info);
+                                    info!("SAS verification ready for presentation");
+                                }
+                                
+                                if sas.is_done() {
+                                    info!("SAS verification completed");
+                                    *bot.active_sas.write().await = None;
+                                    // Remove from verification requests
+                                    bot.verification_requests.write().await.retain(|r| r.request_id != req_info.request_id);
                                 }
                             }
                         }
                     }
-                } else {
-                    break;
                 }
             }
         });
