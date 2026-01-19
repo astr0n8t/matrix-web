@@ -409,14 +409,72 @@ impl MatrixBot {
         
         let user_id = <&UserId>::try_from(other_user_id)?;
         
-        // Get the verification request
-        if let Some(request) = client.encryption().get_verification_request(user_id, request_id).await {
-            info!("Accepting verification request: {}", request_id);
-            request.accept().await?;
-            return Ok(());
+        // Try to get the verification request with retries (in case SDK is still processing)
+        for attempt in 0..5 {
+            if attempt > 0 {
+                info!("Retry attempt {} to get verification request", attempt);
+                tokio::time::sleep(tokio::time::Duration::from_millis(200)).await;
+            }
+            
+            // Get the verification request
+            if let Some(request) = client.encryption().get_verification_request(user_id, request_id).await {
+                info!("Accepting verification request: {}", request_id);
+                request.accept().await?;
+                return Ok(());
+            }
+            
+            // The verification request might have already transitioned to a verification flow
+            // Check if we can find it as a verification instead
+            if let Some(verification) = client.encryption().get_verification(user_id, request_id).await {
+                info!("Verification request already transitioned to verification flow");
+                if let Verification::SasV1(sas) = verification {
+                    // If it's already in SAS mode and can be presented, it still needs to be accepted
+                    if sas.can_be_presented() {
+                        info!("SAS verification is ready for presentation, accepting it");
+                        match sas.accept().await {
+                            Ok(_) => {
+                                info!("Successfully accepted SAS verification");
+                                return Ok(());
+                            }
+                            Err(e) => {
+                                // Check if the error is benign (already accepted)
+                                let err_str = e.to_string();
+                                if err_str.contains("already") || err_str.contains("accepted") {
+                                    info!("SAS verification was already accepted");
+                                    return Ok(());
+                                } else {
+                                    warn!("Failed to accept SAS verification: {}", e);
+                                    return Err(e.into());
+                                }
+                            }
+                        }
+                    }
+                    // If it's in another state, try to accept it anyway
+                    info!("Attempting to accept SAS verification");
+                    match sas.accept().await {
+                        Ok(_) => {
+                            info!("Successfully accepted SAS verification");
+                            return Ok(());
+                        }
+                        Err(e) => {
+                            let err_str = e.to_string();
+                            if err_str.contains("already") || err_str.contains("accepted") || err_str.contains("state") {
+                                info!("SAS verification might already be accepted or in different state: {}", e);
+                                return Ok(());
+                            } else {
+                                warn!("Failed to accept SAS verification: {}", e);
+                                return Err(e.into());
+                            }
+                        }
+                    }
+                } else {
+                    warn!("Verification is not SasV1 type, other verification types not currently supported");
+                    return Err(anyhow::anyhow!("Unsupported verification type"));
+                }
+            }
         }
         
-        Err(anyhow::anyhow!("Verification request not found"))
+        Err(anyhow::anyhow!("Verification request not found after retries"))
     }
 
     pub async fn confirm_verification(&self, request_id: &str, other_user_id: &str) -> anyhow::Result<()> {
@@ -425,9 +483,15 @@ impl MatrixBot {
         
         let user_id = <&UserId>::try_from(other_user_id)?;
         
-        // Get the verification
-        if let Some(verification) = client.encryption().get_verification(user_id, request_id).await {
-            if let Verification::SasV1(sas) = verification {
+        // Try to get the verification with retries (in case SDK is still processing)
+        for attempt in 0..5 {
+            if attempt > 0 {
+                info!("Retry attempt {} to get SAS verification", attempt);
+                tokio::time::sleep(tokio::time::Duration::from_millis(200)).await;
+            }
+            
+            // Get the verification
+            if let Some(Verification::SasV1(sas)) = client.encryption().get_verification(user_id, request_id).await {
                 info!("Confirming SAS verification");
                 sas.confirm().await?;
                 
@@ -442,7 +506,7 @@ impl MatrixBot {
             }
         }
         
-        Err(anyhow::anyhow!("SAS verification not found"))
+        Err(anyhow::anyhow!("SAS verification not found after retries"))
     }
 
     pub async fn cancel_verification(&self, request_id: &str, other_user_id: &str) -> anyhow::Result<()> {
@@ -451,6 +515,7 @@ impl MatrixBot {
         
         let user_id = <&UserId>::try_from(other_user_id)?;
         
+        // Try to cancel the verification request
         if let Some(request) = client.encryption().get_verification_request(user_id, request_id).await {
             info!("Cancelling verification request: {}", request_id);
             request.cancel().await?;
@@ -469,7 +534,34 @@ impl MatrixBot {
             return Ok(());
         }
         
-        Err(anyhow::anyhow!("Verification request not found"))
+        // The request might have already transitioned to a verification
+        if let Some(verification) = client.encryption().get_verification(user_id, request_id).await {
+            info!("Verification has transitioned, cancelling the verification instead");
+            if let Verification::SasV1(sas) = verification {
+                sas.cancel().await?;
+            }
+            
+            // Remove from our tracking
+            self.verification_requests.write().await.retain(|r| r.request_id != request_id);
+            
+            // Clear active SAS if it matches
+            let mut active_sas = self.active_sas.write().await;
+            if let Some(ref sas) = *active_sas {
+                if sas.request_id == request_id {
+                    *active_sas = None;
+                }
+            }
+            
+            return Ok(());
+        }
+        
+        // If we can't find it, it might have already been cancelled or completed
+        // Remove from our tracking anyway
+        self.verification_requests.write().await.retain(|r| r.request_id != request_id);
+        *self.active_sas.write().await = None;
+        
+        info!("Verification request not found, assuming already cancelled or completed");
+        Ok(())
     }
 
     async fn setup_verification_handlers(&self, client: Client) {
@@ -514,42 +606,40 @@ impl MatrixBot {
                 
                 for req_info in requests {
                     if let Ok(user_id) = <&UserId>::try_from(req_info.other_user_id.as_str()) {
-                        if let Some(verification) = client.encryption().get_verification(user_id, &req_info.request_id).await {
-                            if let Verification::SasV1(sas) = verification {
-                                if sas.can_be_presented() {
-                                    // Only update if we don't have active SAS or it's for the same request
-                                    let should_update = {
-                                        let active = bot.active_sas.read().await;
-                                        active.is_none() || active.as_ref().map(|a| &a.request_id) == Some(&req_info.request_id)
+                        if let Some(Verification::SasV1(sas)) = client.encryption().get_verification(user_id, &req_info.request_id).await {
+                            if sas.can_be_presented() {
+                                // Only update if we don't have active SAS or it's for the same request
+                                let should_update = {
+                                    let active = bot.active_sas.read().await;
+                                    active.is_none() || active.as_ref().map(|a| &a.request_id) == Some(&req_info.request_id)
+                                };
+                                
+                                if should_update {
+                                    // Get emoji or decimals
+                                    let emoji = sas.emoji().map(|emojis| {
+                                        emojis.iter()
+                                            .map(|e| (e.symbol.to_string(), e.description.to_string()))
+                                            .collect()
+                                    });
+                                    
+                                    let decimals = sas.decimals();
+                                    
+                                    let sas_info = SasInfo {
+                                        request_id: req_info.request_id.clone(),
+                                        emoji,
+                                        decimals,
                                     };
                                     
-                                    if should_update {
-                                        // Get emoji or decimals
-                                        let emoji = sas.emoji().map(|emojis| {
-                                            emojis.iter()
-                                                .map(|e| (e.symbol.to_string(), e.description.to_string()))
-                                                .collect()
-                                        });
-                                        
-                                        let decimals = sas.decimals().map(|(a, b, c)| (a, b, c));
-                                        
-                                        let sas_info = SasInfo {
-                                            request_id: req_info.request_id.clone(),
-                                            emoji,
-                                            decimals,
-                                        };
-                                        
-                                        *bot.active_sas.write().await = Some(sas_info);
-                                        info!("SAS verification ready for presentation");
-                                    }
+                                    *bot.active_sas.write().await = Some(sas_info);
+                                    info!("SAS verification ready for presentation");
                                 }
-                                
-                                if sas.is_done() {
-                                    info!("SAS verification completed");
-                                    *bot.active_sas.write().await = None;
-                                    // Remove from verification requests
-                                    bot.verification_requests.write().await.retain(|r| r.request_id != req_info.request_id);
-                                }
+                            }
+                            
+                            if sas.is_done() {
+                                info!("SAS verification completed");
+                                *bot.active_sas.write().await = None;
+                                // Remove from verification requests
+                                bot.verification_requests.write().await.retain(|r| r.request_id != req_info.request_id);
                             }
                         }
                     }
