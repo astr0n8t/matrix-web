@@ -105,6 +105,41 @@ impl Config {
         Ok(config)
     }
     
+    /// Load config from multiple possible locations, trying each in order
+    /// until one is found. Returns the loaded config and the path it was loaded from.
+    pub fn load_from_default_locations() -> anyhow::Result<(Self, String)> {
+        let mut config_locations = vec![
+            "/config.yaml".to_string(),                // Docker/container location
+            "./config.yaml".to_string(),               // Current directory
+        ];
+        
+        // Add user config directory if HOME is set
+        if let Ok(home) = env::var("HOME") {
+            config_locations.push(format!("{}/.config/matrix-web/config.yaml", home));
+        }
+        
+        // Add system-wide config
+        config_locations.push("/etc/matrix-web/config.yaml".to_string());
+        
+        for path in config_locations.iter() {
+            match Self::load(path) {
+                Ok(config) => {
+                    tracing::info!("Loaded configuration from: {}", path);
+                    return Ok((config, path.to_string()));
+                }
+                Err(e) => {
+                    tracing::debug!("Failed to load config from {}: {}", path, e);
+                }
+            }
+        }
+        
+        let locations_list = config_locations.join(", ");
+        Err(anyhow::anyhow!(
+            "No config file found in any default location. Tried: {}",
+            locations_list
+        ))
+    }
+    
     fn apply_env_overrides(&mut self) {
         // Matrix configuration
         if let Ok(val) = env::var("MATRIX_HOMESERVER") {

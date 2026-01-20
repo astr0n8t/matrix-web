@@ -62,6 +62,21 @@ store:
   passphrase: ""          # Optional passphrase for encrypting the store
 ```
 
+### Configuration File Locations
+
+The application searches for configuration files in the following locations (in order):
+
+1. `/config.yaml` - Docker/container location
+2. `./config.yaml` - Current working directory
+3. `~/.config/matrix-web/config.yaml` - User configuration directory
+4. `/etc/matrix-web/config.yaml` - System-wide configuration
+
+The first configuration file found will be used. This allows for flexible deployment:
+- Docker containers can mount config at `/config.yaml`
+- Local development can use `./config.yaml` in the project directory
+- User-specific configs can be placed in `~/.config/matrix-web/`
+- System-wide deployments can use `/etc/matrix-web/config.yaml`
+
 ### End-to-End Encryption Setup
 
 The bot automatically configures end-to-end encryption with the following features:
