@@ -180,6 +180,11 @@ impl MatrixBot {
         client.join_room_by_id(room_id).await?;
         info!("Joined room: {}", self.room_id);
         
+        // Perform initial sync to populate room state
+        info!("Performing initial sync to load room state");
+        client.sync_once(SyncSettings::default()).await?;
+        info!("Initial sync completed");
+        
         // Load message history
         self.load_message_history_with_client(&client, self.history_limit).await?;
         
