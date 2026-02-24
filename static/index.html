@@ -585,7 +585,10 @@
             }
         }
 
-        // Load message history with retry logic
+        // Load message history with retry logic.
+        // Retries handle cases where the server-side history may not be
+        // immediately populated after the login/connect call completes.
+        const HISTORY_RETRY_DELAY_MS = 1000;
         async function loadMessageHistory(retries = 3) {
             for (let attempt = 0; attempt < retries; attempt++) {
                 try {
@@ -602,15 +605,16 @@
                                 }
                             });
                             return;
-                        } else if (attempt < retries - 1) {
-                            // History empty, retry after a short delay
-                            await new Promise(resolve => setTimeout(resolve, 1000));
                         }
+                    }
+                    // Retry on empty history or non-OK response
+                    if (attempt < retries - 1) {
+                        await new Promise(resolve => setTimeout(resolve, HISTORY_RETRY_DELAY_MS));
                     }
                 } catch (error) {
                     console.error('Failed to load message history:', error);
                     if (attempt < retries - 1) {
-                        await new Promise(resolve => setTimeout(resolve, 1000));
+                        await new Promise(resolve => setTimeout(resolve, HISTORY_RETRY_DELAY_MS));
                     }
                 }
             }
