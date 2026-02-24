@@ -586,11 +586,11 @@
         }
 
         // Load message history with retry logic.
-        // Retries handle cases where the server-side history may not be
-        // immediately populated after the login/connect call completes.
+        // Retries indefinitely until the backend returns a successful (OK) response,
+        // handling cases where history may not be immediately available after login.
         const HISTORY_RETRY_DELAY_MS = 1000;
-        async function loadMessageHistory(retries = 3) {
-            for (let attempt = 0; attempt < retries; attempt++) {
+        async function loadMessageHistory() {
+            while (true) {
                 try {
                     const response = await fetch('/api/history');
                     if (response.ok) {
@@ -604,19 +604,13 @@
                                     addMessage(sender, content);
                                 }
                             });
-                            return;
                         }
-                    }
-                    // Retry on empty history or non-OK response
-                    if (attempt < retries - 1) {
-                        await new Promise(resolve => setTimeout(resolve, HISTORY_RETRY_DELAY_MS));
+                        return;
                     }
                 } catch (error) {
                     console.error('Failed to load message history:', error);
-                    if (attempt < retries - 1) {
-                        await new Promise(resolve => setTimeout(resolve, HISTORY_RETRY_DELAY_MS));
-                    }
                 }
+                await new Promise(resolve => setTimeout(resolve, HISTORY_RETRY_DELAY_MS));
             }
         }
 
