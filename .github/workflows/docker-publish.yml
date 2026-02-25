@@ -78,7 +78,7 @@ jobs:
             ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
           cache-from: type=registry,ref=ghcr.io/astr0n8t/matrix-web:buildcache-${{ matrix.platform }}
-          cache-to: ${{ github.event_name != 'pull_request' && format('type=registry,ref=ghcr.io/astr0n8t/matrix-web:buildcache-{0},mode=max', matrix.platform) || '' }}
+          cache-to: type=registry,ref=ghcr.io/astr0n8t/matrix-web:buildcache-${{ matrix.platform }},mode=max
           platforms: linux/${{ matrix.platform }}
           build-args: |
             BUILDPLATFORM=linux/amd64
@@ -97,14 +97,12 @@ jobs:
         run: echo "${{ steps.meta.outputs.tags }}" | xargs -I {} cosign sign --yes {}@${{ steps.build-and-push.outputs.digest }}
 
       - name: Export digest
-        if: github.event_name != 'pull_request'
         run: |
           mkdir -p /tmp/digests
           digest="${{ steps.build-and-push.outputs.digest }}"
           touch "/tmp/digests/${digest#sha256:}"
 
       - name: Upload digest artifact
-        if: github.event_name != 'pull_request'
         uses: actions/upload-artifact@v4
         with:
           name: digests-${{ matrix.platform }}
