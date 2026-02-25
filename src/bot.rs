@@ -401,6 +401,13 @@ impl MatrixBot {
     }
 
     pub async fn get_message_history(&self) -> Vec<String> {
+        let client = self.client.lock().await.clone();
+        if let Some(client) = client {
+            if let Err(e) = self.load_message_history_with_client(&client, self.history_limit).await {
+                warn!("Failed to refresh message history: {}", e);
+            }
+        }
+
         let history = self.message_history.read().await;
         history.clone()
     }
