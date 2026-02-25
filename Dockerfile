@@ -29,8 +29,6 @@ RUN if [ "$TARGETPLATFORM" = "linux/arm" ]; then rustup target add arm-unknown-l
 
 RUN if [ "$TARGETPLATFORM" = "linux/arm/v7" ]; then rustup target add armv7-unknown-linux-musleabi; fi
 
-RUN cargo install cargo-chef --locked --version 0.1.73
-
 # create a new empty project
 RUN cargo init
 COPY Cargo.toml ./
