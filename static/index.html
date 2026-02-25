@@ -432,10 +432,30 @@
         let credentialsExist = false;
         let verificationCheckInterval = null;
         let currentVerificationRequest = null;
+        let unreadCount = 0;
+        let isTabActive = true;
+        const originalTitle = document.title;
 
         // Auto-scroll to bottom
         function scrollToBottom() {
             messagesDiv.scrollTop = messagesDiv.scrollHeight;
+        }
+
+        // Tab visibility tracking for notification bells
+        document.addEventListener('visibilitychange', () => {
+            if (document.hidden) {
+                isTabActive = false;
+            } else {
+                isTabActive = true;
+                unreadCount = 0;
+                document.title = originalTitle;
+            }
+        });
+
+        function updateTitleNotification() {
+            if (!isTabActive && unreadCount > 0) {
+                document.title = `(${unreadCount}) 🔔 ${originalTitle}`;
+            }
         }
 
         // Add message to display
@@ -565,23 +585,32 @@
             }
         }
 
-        // Load message history
+        // Load message history with retry logic.
+        // Retries indefinitely until the backend returns a successful (OK) response,
+        // handling cases where history may not be immediately available after login.
+        const HISTORY_RETRY_DELAY_MS = 1000;
         async function loadMessageHistory() {
-            try {
-                const response = await fetch('/api/history');
-                if (response.ok) {
-                    const data = await response.json();
-                    data.messages.forEach(msg => {
-                        const colonSpaceIndex = msg.indexOf(': ');
-                        if (colonSpaceIndex > 0) {
-                            const sender = msg.substring(0, colonSpaceIndex);
-                            const content = msg.substring(colonSpaceIndex + 2);
-                            addMessage(sender, content);
+            while (true) {
+                try {
+                    const response = await fetch('/api/history');
+                    if (response.ok) {
+                        const data = await response.json();
+                        if (data.messages && data.messages.length > 0) {
+                            data.messages.forEach(msg => {
+                                const colonSpaceIndex = msg.indexOf(': ');
+                                if (colonSpaceIndex > 0) {
+                                    const sender = msg.substring(0, colonSpaceIndex);
+                                    const content = msg.substring(colonSpaceIndex + 2);
+                                    addMessage(sender, content);
+                                }
+                            });
                         }
-                    });
+                        return;
+                    }
+                } catch (error) {
+                    console.error('Failed to load message history:', error);
                 }
-            } catch (error) {
-                console.error('Failed to load message history:', error);
+                await new Promise(resolve => setTimeout(resolve, HISTORY_RETRY_DELAY_MS));
             }
         }
 
@@ -634,6 +663,12 @@
                     const sender = data.substring(0, colonSpaceIndex);
                     const content = data.substring(colonSpaceIndex + 2);
                     addMessage(sender, content);
+                    
+                    // Update unread count and title when tab is inactive
+                    if (!isTabActive) {
+                        unreadCount++;
+                        updateTitleNotification();
+                    }
                 }
             };
             

@@ -2,7 +2,7 @@ use axum::{
     extract::State,
     http::{Request, StatusCode},
     middleware::{self, Next},
-    response::{sse::Event, Html, IntoResponse, Response, Sse},
+    response::{sse::{Event, KeepAlive}, Html, IntoResponse, Response, Sse},
     routing::{get, post},
     Json, Router,
 };
@@ -335,7 +335,7 @@ async fn stream_messages_handler(
         }
     });
 
-    Sse::new(stream)
+    Sse::new(stream).keep_alive(KeepAlive::default())
 }
 
 async fn get_verification_requests_handler(
