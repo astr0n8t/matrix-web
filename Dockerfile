@@ -1,10 +1,11 @@
-# Build Stage
 ARG BUILDPLATFORM
+
+# Build Stage
 FROM --platform=${BUILDPLATFORM} rust:latest AS rust-source
-FROM --platform=${BUILDPLATFORM} ghcr.io/cross-rs/x86_64-unknown-linux-gnu:edge AS build_amd64
-FROM --platform=${BUILDPLATFORM} ghcr.io/cross-rs/aarch64-unknown-linux-gnu:edge AS build_arm64
-FROM --platform=${BUILDPLATFORM} ghcr.io/cross-rs/armv7-unknown-linux-gnueabi:edge AS build_armv7
-FROM --platform=${BUILDPLATFORM} ghcr.io/cross-rs/arm-unknown-linux-gnueabi:edge AS build_arm
+FROM --platform=${BUILDPLATFORM} ghcr.io/cross-rs/x86_64-unknown-linux-musl:edge AS build_amd64
+FROM --platform=${BUILDPLATFORM} ghcr.io/cross-rs/aarch64-unknown-linux-musl:edge AS build_arm64
+FROM --platform=${BUILDPLATFORM} ghcr.io/cross-rs/armv7-unknown-linux-musleabi:edge AS build_armv7
+FROM --platform=${BUILDPLATFORM} ghcr.io/cross-rs/arm-unknown-linux-musleabi:edge AS build_arm
 
 ARG TARGETARCH
 ARG TARGETVARIANT
@@ -20,50 +21,46 @@ RUN rustup default stable
 WORKDIR /app
 
 ARG TARGETPLATFORM
-RUN if [ "$TARGETPLATFORM" = "linux/amd64" ]; then rustup target add x86_64-unknown-linux-gnu; fi
+RUN if [ "$TARGETPLATFORM" = "linux/amd64" ]; then rustup target add x86_64-unknown-linux-musl; fi
 
-RUN if [ "$TARGETPLATFORM" = "linux/arm64" ]; then rustup target add aarch64-unknown-linux-gnu; fi
+RUN if [ "$TARGETPLATFORM" = "linux/arm64" ]; then rustup target add aarch64-unknown-linux-musl; fi
 
-RUN if [ "$TARGETPLATFORM" = "linux/arm" ]; then rustup target add arm-unknown-linux-gnueabi; fi
+RUN if [ "$TARGETPLATFORM" = "linux/arm" ]; then rustup target add arm-unknown-linux-musleabi; fi
 
-RUN if [ "$TARGETPLATFORM" = "linux/arm/v7" ]; then rustup target add armv7-unknown-linux-gnueabi; fi
+RUN if [ "$TARGETPLATFORM" = "linux/arm/v7" ]; then rustup target add armv7-unknown-linux-musleabi; fi
 
-RUN cargo install cargo-chef --locked
+RUN cargo install cargo-chef --locked --version 0.1.73
 
 # create a new empty project
 RUN cargo init
 COPY Cargo.toml ./
 
-RUN cargo chef prepare --recipe-path recipe.json
-
-# cache deps compile
-RUN if [ "$TARGETPLATFORM" = "linux/amd64" ]; then cargo chef cook --release --recipe-path recipe.json --target x86_64-unknown-linux-gnu; fi
-RUN if [ "$TARGETPLATFORM" = "linux/arm64" ]; then cargo chef cook --release --recipe-path recipe.json --target aarch64-unknown-linux-gnu; fi
-RUN if [ "$TARGETPLATFORM" = "linux/arm" ]; then cargo chef cook --release --recipe-path recipe.json -target arm-unknown-linux-gnueabi; fi
-RUN if [ "$TARGETPLATFORM" = "linux/arm/v7" ]; then cargo chef cook --release --recipe-path recipe.json --target armv7-unknown-linux-gnueabi; fi
-
 COPY ./src src
 COPY ./static static
 
 # Translate docker platforms to rust platforms
-RUN if [ "$TARGETPLATFORM" = "linux/amd64" ]; then \
-  cargo build --release --target x86_64-unknown-linux-gnu; \
-  cp /app/target/x86_64-unknown-linux-gnu/release/matrix-web /app/matrix-web; \
+RUN --mount=type=cache,sharing=locked,id=${TARGETARCH}/root/.cargo,target=/root/.cargo \
+  if [ "$TARGETPLATFORM" = "linux/amd64" ]; then \
+  cargo build --release --target x86_64-unknown-linux-musl; \
+  cp /app/target/x86_64-unknown-linux-musl/release/matrix-web /app/matrix-web; \
   fi
 
-RUN if [ "$TARGETPLATFORM" = "linux/arm64" ]; then \
-  cargo build --release --target aarch64-unknown-linux-gnu; \
-  cp /app/target/aarch64-unknown-linux-gnu/release/matrix-web /app/matrix-web; \
+RUN --mount=type=cache,sharing=locked,id=${TARGETARCH}/root/.cargo,target=/root/.cargo \
+  if [ "$TARGETPLATFORM" = "linux/arm64" ]; then \
+  cargo build --release --target aarch64-unknown-linux-musl; \
+  cp /app/target/aarch64-unknown-linux-musl/release/matrix-web /app/matrix-web; \
   fi
 
-RUN if [ "$TARGETPLATFORM" = "linux/arm/v7" ]; then \
-  cargo build --release --target armv7-unknown-linux-gnueabi; \
-  cp /app/target/armv7-unknown-linux-gnueabi/release/matrix-web /app/matrix-web; \
+RUN --mount=type=cache,sharing=locked,id=${TARGETARCH}/root/.cargo,target=/root/.cargo \
+  if [ "$TARGETPLATFORM" = "linux/arm/v7" ]; then \
+  cargo build --release --target armv7-unknown-linux-musleabi; \
+  cp /app/target/armv7-unknown-linux-musleabi/release/matrix-web /app/matrix-web; \
   fi
 
-RUN if [ "$TARGETPLATFORM" = "linux/arm" ]; then \
-  cargo build --release --target arm-unknown-linux-gnueabi; \
-  cp /app/target/arm-unknown-linux-gnueabi/release/matrix-web /app/matrix-web; \
+RUN --mount=type=cache,sharing=locked,id=${TARGETARCH}/root/.cargo,target=/root/.cargo \
+  if [ "$TARGETPLATFORM" = "linux/arm" ]; then \
+  cargo build --release --target arm-unknown-linux-musleabi; \
+  cp /app/target/arm-unknown-linux-musleabi/release/matrix-web /app/matrix-web; \
   fi
 
 # Create directory for mounting in the final stage
