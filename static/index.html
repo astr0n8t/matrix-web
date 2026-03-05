@@ -432,6 +432,8 @@
         let credentialsExist = false;
         let verificationCheckInterval = null;
         let currentVerificationRequest = null;
+        // Track completed verification request IDs to prevent re-prompting
+        const completedVerifications = new Set();
         let unreadCount = 0;
         let isTabActive = true;
         const originalTitle = document.title;
@@ -696,17 +698,22 @@
                 if (response.ok) {
                     const data = await response.json();
                     if (data.requests && data.requests.length > 0 && !currentVerificationRequest) {
-                        // Show the first pending request only if no request is currently being handled
-                        showVerificationRequest(data.requests[0]);
+                        // Show the first pending request that hasn't been completed
+                        const pendingRequest = data.requests.find(r => !completedVerifications.has(r.request_id));
+                        if (pendingRequest) {
+                            showVerificationRequest(pendingRequest);
+                        }
                     }
                 }
                 
-                // Check for active SAS
-                const sasResponse = await fetch('/api/verification/sas');
-                if (sasResponse.ok) {
-                    const sasData = await sasResponse.json();
-                    if (sasData.active && sasData.sas_info) {
-                        showSasVerification(sasData.sas_info);
+                // Check for active SAS only if we have a current verification in progress
+                if (currentVerificationRequest) {
+                    const sasResponse = await fetch('/api/verification/sas');
+                    if (sasResponse.ok) {
+                        const sasData = await sasResponse.json();
+                        if (sasData.active && sasData.sas_info) {
+                            showSasVerification(sasData.sas_info);
+                        }
                     }
                 }
             } catch (error) {
@@ -795,6 +802,9 @@
         async function confirmVerification() {
             if (!currentVerificationRequest) return;
             
+            // Track the request ID before clearing currentVerificationRequest
+            const completedRequestId = currentVerificationRequest.request_id;
+            
             try {
                 const response = await fetch('/api/verification/confirm', {
                     method: 'POST',
@@ -807,6 +817,8 @@
                 
                 const result = await response.json();
                 if (result.success) {
+                    // Mark this verification as completed to prevent re-prompting
+                    completedVerifications.add(completedRequestId);
                     verificationContent.innerHTML = `
                         <div class="verification-status" style="color: #00ff00;">
                             ✓ Verification completed successfully!
@@ -830,6 +842,9 @@
                 return;
             }
             
+            // Track the request ID to prevent re-prompting
+            const cancelledRequestId = currentVerificationRequest.request_id;
+            
             try {
                 const response = await fetch('/api/verification/cancel', {
                     method: 'POST',
@@ -842,6 +857,7 @@
                 
                 const result = await response.json();
                 if (result.success) {
+                    completedVerifications.add(cancelledRequestId);
                     verificationModal.classList.add('hidden');
                     currentVerificationRequest = null;
                 } else {
@@ -849,6 +865,7 @@
                 }
             } catch (error) {
                 console.error('Error cancelling verification:', error);
+                completedVerifications.add(cancelledRequestId);
                 verificationModal.classList.add('hidden');
             }
         }
