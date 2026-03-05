@@ -26,6 +26,8 @@ use crate::credentials::CredentialStore;
 // Constants for SAS verification retry logic
 const MAX_SAS_TRANSITION_ATTEMPTS: u32 = 150;
 const SAS_TRANSITION_RETRY_DELAY_MS: u64 = 2000;
+const MAX_VERIFICATION_DONE_RETRIES: usize = 10;
+const VERIFICATION_DONE_RETRY_DELAY_MS: u64 = 500;
 
 pub type MessageSender = broadcast::Sender<String>;
 pub type MessageReceiver = broadcast::Receiver<String>;
@@ -608,14 +610,14 @@ impl MatrixBot {
                 sas.confirm().await?;
                 
                 // Wait for verification to complete with retries
-                for done_attempt in 0..10 {
-                    tokio::time::sleep(tokio::time::Duration::from_millis(500)).await;
+                for retry in 0..MAX_VERIFICATION_DONE_RETRIES {
+                    tokio::time::sleep(tokio::time::Duration::from_millis(VERIFICATION_DONE_RETRY_DELAY_MS)).await;
                     if sas.is_done() {
                         info!("Verification completed successfully!");
                         break;
                     }
-                    if done_attempt == 9 {
-                        warn!("Verification confirm sent but is_done() not yet true after retries");
+                    if retry == MAX_VERIFICATION_DONE_RETRIES - 1 {
+                        warn!("Verification confirm sent but is_done() not yet true after {} retries", MAX_VERIFICATION_DONE_RETRIES);
                     }
                 }
                 
