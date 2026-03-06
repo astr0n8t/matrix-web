@@ -13,7 +13,8 @@ use matrix_sdk::{
         },
         UInt, UserId,
     },
-    Client, SessionMeta,
+    Client, LoopCtrl, SessionMeta,
+    RoomMemberships,
 };
 use std::sync::Arc;
 use tokio::sync::{broadcast, RwLock, Mutex};
@@ -25,6 +26,8 @@ use crate::credentials::CredentialStore;
 // Constants for SAS verification retry logic
 const MAX_SAS_TRANSITION_ATTEMPTS: u32 = 150;
 const SAS_TRANSITION_RETRY_DELAY_MS: u64 = 2000;
+const MAX_VERIFICATION_DONE_RETRIES: usize = 10;
+const VERIFICATION_DONE_RETRY_DELAY_MS: u64 = 500;
 
 pub type MessageSender = broadcast::Sender<String>;
 pub type MessageReceiver = broadcast::Receiver<String>;
@@ -392,8 +395,18 @@ impl MatrixBot {
             );
 
             info!("Starting sync loop");
-            if let Err(e) = client.sync(SyncSettings::default()).await {
-                error!("Sync error: {}", e);
+            // Use sync_with_result_callback instead of sync() to handle transient
+            // errors gracefully. client.sync() stops the entire loop on any error,
+            // which means device list changes, key queries, and key distribution
+            // all stop — breaking E2E encryption for new devices.
+            if let Err(e) = client.sync_with_result_callback(SyncSettings::default(), |result| async move {
+                if let Err(ref e) = result {
+                    error!("Sync error (will retry): {}", e);
+                }
+                // Always continue the sync loop regardless of errors
+                Ok(LoopCtrl::Continue)
+            }).await {
+                error!("Sync loop terminated unexpectedly: {}", e);
             }
         });
         
@@ -419,6 +432,28 @@ impl MatrixBot {
         let room_id = <&matrix_sdk::ruma::RoomId>::try_from(self.room_id.as_str())?;
         
         if let Some(room) = client.get_room(room_id) {
+            // Ensure all room members are loaded and their device keys are tracked.
+            // This is critical for E2E encryption: when a user adds a new device,
+            // we need to share the room key with that device. The SDK's send flow
+            // calls sync_members() only once and then relies on the sync loop for
+            // device updates. By explicitly loading members here, we ensure the
+            // SDK's device tracking is aware of all current room members.
+            if let Err(e) = room.members(RoomMemberships::ACTIVE).await {
+                warn!("Failed to sync room members before send: {}", e);
+            }
+            
+            // Ensure we have up-to-date device information for all room members.
+            // This reads from the local crypto store, ensuring the SDK's encryption
+            // layer is aware of all known devices (including recently added ones
+            // that the sync loop has picked up).
+            if let Ok(members) = room.members_no_sync(RoomMemberships::ACTIVE).await {
+                for member in &members {
+                    if let Err(e) = client.encryption().get_user_devices(member.user_id()).await {
+                        warn!("Failed to get devices for {}: {}", member.user_id(), e);
+                    }
+                }
+            }
+            
             let content = RoomMessageEventContent::text_plain(message);
             room.send(content).await?;
             info!("Sent message to room");
@@ -574,13 +609,23 @@ impl MatrixBot {
                 info!("Confirming SAS verification");
                 sas.confirm().await?;
                 
-                // Wait a moment for verification to complete
-                tokio::time::sleep(tokio::time::Duration::from_millis(500)).await;
-                
-                if sas.is_done() {
-                    info!("Verification completed successfully!");
-                    *self.active_sas.write().await = None;
+                // Wait for verification to complete with retries
+                for retry in 0..MAX_VERIFICATION_DONE_RETRIES {
+                    tokio::time::sleep(tokio::time::Duration::from_millis(VERIFICATION_DONE_RETRY_DELAY_MS)).await;
+                    if sas.is_done() {
+                        info!("Verification completed successfully!");
+                        break;
+                    }
+                    if retry == MAX_VERIFICATION_DONE_RETRIES - 1 {
+                        warn!("Verification confirm sent but is_done() not yet true after {} retries", MAX_VERIFICATION_DONE_RETRIES);
+                    }
                 }
+                
+                // Always clean up after confirmation, regardless of is_done() state.
+                // This prevents the verification from being re-prompted to the user.
+                *self.active_sas.write().await = None;
+                self.verification_requests.write().await.retain(|r| r.request_id != request_id);
+                
                 return Ok(());
             }
         }
@@ -650,10 +695,20 @@ impl MatrixBot {
         client.add_event_handler(move |ev: matrix_sdk::ruma::events::key::verification::request::ToDeviceKeyVerificationRequestEvent| {
             let bot = bot.clone();
             async move {
-                info!("Received verification request from {}", ev.sender);
+                let request_id = ev.content.transaction_id.to_string();
+                info!("Received verification request from {} (id: {})", ev.sender, request_id);
+                
+                // Check for duplicate request_ids to prevent re-prompting
+                {
+                    let existing = bot.verification_requests.read().await;
+                    if existing.iter().any(|r| r.request_id == request_id) {
+                        info!("Verification request {} already in queue, skipping duplicate", request_id);
+                        return;
+                    }
+                }
                 
                 let request_info = VerificationRequestInfo {
-                    request_id: ev.content.transaction_id.to_string(),
+                    request_id,
                     other_user_id: ev.sender.to_string(),
                     other_device_id: ev.content.from_device.to_string(),
                     status: "pending".to_string(),
@@ -714,11 +769,34 @@ impl MatrixBot {
                                 }
                             }
                             
-                            if sas.is_done() {
-                                info!("SAS verification completed");
+                            if sas.is_done() || sas.is_cancelled() {
+                                info!("SAS verification completed or cancelled, cleaning up");
                                 *bot.active_sas.write().await = None;
-                                // Remove from verification requests
                                 bot.verification_requests.write().await.retain(|r| r.request_id != req_info.request_id);
+                            }
+                        } else {
+                            // Verification object not found — check if the request itself is still valid
+                            if let Some(request) = client.encryption().get_verification_request(user_id, &req_info.request_id).await {
+                                if request.is_done() || request.is_cancelled() {
+                                    info!("Verification request {} is done or cancelled, removing from queue", req_info.request_id);
+                                    bot.verification_requests.write().await.retain(|r| r.request_id != req_info.request_id);
+                                    let mut active_sas = bot.active_sas.write().await;
+                                    if let Some(ref sas) = *active_sas {
+                                        if sas.request_id == req_info.request_id {
+                                            *active_sas = None;
+                                        }
+                                    }
+                                }
+                            } else {
+                                // Neither verification nor request found — it may have expired or been cleaned up
+                                info!("Verification request {} no longer exists, removing from queue", req_info.request_id);
+                                bot.verification_requests.write().await.retain(|r| r.request_id != req_info.request_id);
+                                let mut active_sas = bot.active_sas.write().await;
+                                if let Some(ref sas) = *active_sas {
+                                    if sas.request_id == req_info.request_id {
+                                        *active_sas = None;
+                                    }
+                                }
                             }
                         }
                     }
